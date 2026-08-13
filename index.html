@@ -120,7 +120,8 @@ html,body { width:100%; height:100%; overflow:hidden; background:#05060f;
   <h1>StarCatcher:<br>Ascension</h1>
   <p class="sub">Roguelike-аркада. Лови звёзды → набирай опыт → выбирай улучшения.<br>
     Щит не восстанавливается сам — чини его сферами 🛡.<br>
-    Каждые 5 волн — босс. Всего 5 боссов, у каждого новые механики атак.</p>
+    Каждые 5 волн — босс. Всего 5 боссов, у каждого новые механики атак.<br>
+    <b style="color:#ff8fa3">Сложность растёт с каждой волной.</b></p>
   <button id="startBtn">▶ Играть</button>
   <button id="shopBtn" class="ghost">🛒 Мастерская</button>
   <p class="dust">⭐ Пыль: <span id="menuDust">0</span></p>
@@ -153,9 +154,9 @@ html,body { width:100%; height:100%; overflow:hidden; background:#05060f;
 
 <script>
 /* ============================================================
-   StarCatcher: Ascension — полностью локальная игра.
-   Никакие данные никуда не отправляются.
-   Прогресс хранится только в localStorage этого браузера.
+   StarCatcher: Ascension v4 — полностью локальная игра.
+   Усложнённый баланс: меньше щит, больше урон, толще боссы,
+   плотнее спавн, слабее лазер, медленнее прокачка.
    ============================================================ */
 
 /* ================= УТИЛИТЫ ================= */
@@ -208,7 +209,7 @@ const G = {
   wave:1, waveTimer:0, speed:0, spawnT:0,
   level:1, xp:0, xpNeed:6,
   dust:+(localStorage.getItem('sc_dust')||0), runDust:0,
-  shield:100, shieldMax:100,
+  shield:80, shieldMax:80,
   power:null, beamT:0, rain:0, boss:null,
   up:{ mult:0, value:0, speed:0, maxhp:0, comboKeep:false, crit:false, laserMax:1 },
   laser:{ ch:1, max:1, cd:0 },
@@ -224,9 +225,9 @@ const META = [
   { id:'val',       name:'✨ +2 к звезде',   desc:'Каждая звезда +2 очков', max:5, base:30 },
   { id:'mult',      name:'×+1 множитель',    desc:'Макс. множитель комбо +1', max:2, base:70 },
   { id:'speed',     name:'⚡ +5% скорости',  desc:'Корабль быстрее', max:5, base:25 },
-  { id:'magnet',    name:'🧲 Старт-магнит',  desc:'10с магнита в начале забега', max:1, base:120 },
-  { id:'shieldMax', name:'🛡 +25 щита',      desc:'Макс. шкала щита +25', max:3, base:35 },
-  { id:'laserDmg',  name:'🔫 Урон лазера +5',desc:'Лазер бьёт сильнее', max:4, base:30 },
+  { id:'magnet',    name:'🧲 Старт-магнит',  desc:'6с магнита в начале забега', max:1, base:120 },
+  { id:'shieldMax', name:'🛡 +20 щита',      desc:'Макс. шкала щита +20', max:3, base:35 },
+  { id:'laserDmg',  name:'🔫 Урон лазера +4',desc:'Лазер бьёт сильнее', max:4, base:30 },
   { id:'laserCd',   name:'⏱ Перезарядка −1с',desc:'Лазер перезаряжается быстрее', max:4, base:30 },
   { id:'laserCh',   name:'🔋 +1 заряд',      desc:'+1 макс. заряд лазера', max:2, base:90 }
 ];
@@ -235,9 +236,9 @@ try{ M = JSON.parse(localStorage.getItem('sc_meta')||'{}'); }catch(e){ M={}; }
 
 /* ================= ПУЛ УЛУЧШЕНИЙ ЗАБЕГА ================= */
 const RUN_UPGRADES = [
-  { id:'magnet',  name:'🧲 Магнит',    desc:'Притягивает звёзды 8с',            r:1.0, rare:false },
-  { id:'shield',  name:'🛡 Конденсатор', desc:'Макс. щит +30, текущий +30',     r:0.9, rare:false },
-  { id:'slow',    name:'🐌 Замедление', desc:'Метеоры медленнее 6с',            r:0.9, rare:false },
+  { id:'magnet',  name:'🧲 Магнит',    desc:'Притягивает звёзды 6с',            r:1.0, rare:false },
+  { id:'shield',  name:'🛡 Конденсатор', desc:'Макс. щит +25, текущий +25',     r:0.9, rare:false },
+  { id:'slow',    name:'🐌 Замедление', desc:'Метеоры медленнее 5с',            r:0.9, rare:false },
   { id:'laser',   name:'🔫 Лазер',     desc:'+1 макс. заряд лазера',            r:0.8, rare:true  },
   { id:'maxhp',   name:'💖 Макс. HP',  desc:'+1 макс. жизнь и полное лечение',  r:0.7, rare:true  },
   { id:'mult',    name:'×1 множитель', desc:'Макс. множитель комбо +1',         r:0.7, rare:true  },
@@ -246,7 +247,7 @@ const RUN_UPGRADES = [
   { id:'combo',   name:'🔗 Комбо-клей', desc:'Промах не сбрасывает комбо',      r:0.5, rare:true  },
   { id:'crit',    name:'🎯 Криты',     desc:'25% шанс ×3 к очку звезды',        r:0.6, rare:true  },
   { id:'heal',    name:'💊 Лечение',   desc:'+1 жизнь (до макс.)',              r:0.9, rare:false },
-  { id:'rain',    name:'🌠 Звёздный дождь', desc:'Наследующие 14 звёзд падают разом', r:0.5, rare:true }
+  { id:'rain',    name:'🌠 Звёздный дождь', desc:'Наследующие 10 звёзд падают разом', r:0.5, rare:true }
 ];
 
 /* ================= ФОН ================= */
@@ -314,54 +315,55 @@ function spawn(){
   const w = G.wave, r = Math.random();
   const x = rand(26,W-26);
   if(G.rain>0){ G.rain--; addItem('star', x, -20, rand(120,220), rand(11,15)); return; }
-  if(r < 0.05){ addItem(pick(['magnet','shield','slow']), x, -26, rand(150,230), 16); return; }
-  if(r < 0.11){ addItem('gem', x, -26, rand(140,220), 12); return; }
-  if(r < 0.20){ addItem('heart', x, -26, rand(120,180), 14); return; }
+  if(r < 0.035){ addItem(pick(['magnet','shield','slow']), x, -26, rand(150,230), 16); return; }
+  if(r < 0.095){ addItem('gem', x, -26, rand(140,220), 12); return; }
+  if(r < 0.165){ addItem('heart', x, -26, rand(120,180), 14); return; }
   const t = pickEnemyType();
   const sp = G.speed;
-  if(t==='fast')   addItem('fast',   x, -20, rand(sp*1.5, sp*2.0), rand(9,12));
-  else if(t==='tank') addItem('tank', x, -26, rand(sp*.45, sp*.6), rand(26,32), { hp:3 });
-  else if(t==='split') addItem('split', x, -24, rand(sp*.8, sp*1.1), 18);
-  else if(t==='zigzag') addItem('zigzag', x, -24, rand(sp*.9, sp*1.2), rand(13,17));
+  if(t==='fast')   addItem('fast',   x, -20, rand(sp*1.6, sp*2.1), rand(9,12));
+  else if(t==='tank'){ const hp=4+Math.floor(G.wave/5)*2; addItem('tank', x, -26, rand(sp*.45, sp*.6), rand(26,32), { hp, maxHp:hp }); }
+  else if(t==='split') addItem('split', x, -24, rand(sp*.8, sp*1.1), 18, { hp:2, maxHp:2 });
+  else if(t==='zigzag'){ const hp=2+Math.floor(G.wave/10)*2; addItem('zigzag', x, -24, rand(sp*.9, sp*1.2), rand(13,17), { hp, maxHp:hp }); }
   else addItem('meteor', x, -26, rand(sp*.8, sp*1.2), rand(14,21));
 }
 function spawnEnemyAt(x,y,type,vy){
   if(type==='fast') addItem('fast',x,y,vy,rand(8,11));
-  else if(type==='tank') addItem('tank',x,y,vy,rand(22,28),{hp:2});
+  else if(type==='tank'){ const hp=3+Math.floor(G.wave/5); addItem('tank',x,y,vy,rand(22,28),{hp, maxHp:hp}); }
   else addItem('meteor',x,y,vy,rand(10,14));
 }
 function bossNumber(){ return G.wave/5; } // 1..5
 function spawnBoss(){
   const n = bossNumber();
-  const hp = 30 + G.wave*6;
-  G.boss = { x:W/2, y:80, r:46, hp, maxHp:hp, t:0, spawnT:2, attackT:3, n,
+  const hp = 35 + G.wave*7;
+  G.boss = { x:W/2, y:80, r:46, hp, maxHp:hp, t:0, spawnT:1.6, attackT:2.2, n,
              sweep:null, enraged:false };
   sfx.boss(); banner('⚠ БОСС '+n+'/5 ⚠', '#ff5d6c', 30);
   G.shake = 1;
 }
 
 /* ---------- МЕХАНИКИ АТАК БОССОВ ---------- */
-function attackInterval(n,e){ return Math.max(1.6, 4.5 - n*0.4) * (e ? 0.6 : 1); }
+function attackInterval(n,e){ return Math.max(1.2, 3.6 - n*0.3) * (e ? 0.5 : 1); }
 
 function bossAttack(b){
   const n = b.n, e = b.enraged;
-  if(n>=2) volley(b, e ? 5 : 3);      // босс 2+: прицельный залп
-  if(n>=3) meteorRain(b, e ? 8 : 5);  // босс 3+: метеорный дождь
-  if(n>=4) sweepCharge(b);            // босс 4+: рывок через экран
-  if(n>=5) ringBurst(b);              // босс 5+: кольцо огня
+  volley(b, 1);                 // всегда: прицельный выстрел
+  if(n>=2) volley(b, e ? 6 : 4);// босс 2+: прицельный залп
+  if(n>=3) meteorRain(b, e ? 10 : 6); // босс 3+: метеорный дождь
+  if(n>=4) sweepCharge(b);      // босс 4+: рывок через экран (стреляет по пути)
+  if(n>=5) ringBurst(b);        // босс 5+: кольцо огня
 }
 function volley(b, count){
   for(let i=0;i<count;i++){
-    const spread = (i-(count-1)/2)*0.18;
+    const spread = (i-(count-1)/2)*0.16;
     const ang = Math.atan2((H-74)-b.y, player.x-b.x) + spread;
-    const sp = 260 + G.wave*4;
+    const sp = 300 + G.wave*6;
     spawnBullet(b.x, b.y, Math.cos(ang)*sp, Math.sin(ang)*sp, 7);
   }
   sfx.laser();
 }
 function meteorRain(b, count){
   for(let i=0;i<count;i++){
-    const x = clamp(player.x + rand(-130,130), 30, W-30);
+    const x = clamp(player.x + rand(-160,160), 30, W-30);
     addItem('meteor', x, -30, rand(180,260), rand(13,18));
   }
   banner('МЕТЕОРНЫЙ ДОЖДЬ!', '#ff9a5e', 20);
@@ -372,16 +374,16 @@ function sweepCharge(b){
     x0: fromLeft ? -60 : W+60,
     x1: fromLeft ? W+60 : -60,
     y: Math.min(H-120, H*0.5),
-    t: 0, dur: 1.1
+    t: 0, dur: 0.9, shots: 0
   };
   banner('РЫВОК!', '#ff5d6c', 22);
   sfx.boss();
 }
 function ringBurst(b){
-  const count = 12;
+  const count = 16;
   for(let i=0;i<count;i++){
     const a = i/count*Math.PI*2;
-    spawnBullet(b.x, b.y, Math.cos(a)*170, Math.sin(a)*170, 6);
+    spawnBullet(b.x, b.y, Math.cos(a)*220, Math.sin(a)*220, 6);
   }
   banner('КОЛЬЦО ОГНЯ!', '#ff5d6c', 20);
 }
@@ -397,12 +399,12 @@ function resetRun(){
   G.up={ mult:0, value:0, speed:0, maxhp:0, comboKeep:false, crit:false, laserMax:1 };
   G.maxLives = 3 + (M.hp||0);
   G.lives = G.maxLives;
-  G.shieldMax = 100 + (M.shieldMax||0)*25;
+  G.shieldMax = 80 + (M.shieldMax||0)*20;
   G.shield = G.shieldMax;
   G.laser = { ch:1, max:1, cd:0 };
   items=[]; bullets=[]; parts=[]; texts=[]; keys={};
   player.x=W/2; player.vx=0; player.targetX=null;
-  if(M.magnet) G.power={ type:'magnet', t:10 };
+  if(M.magnet) G.power={ type:'magnet', t:6 };
   $('score').textContent='0'; renderHearts(); renderShield(); updateXp();
   $('waveHud').textContent='1'; $('combo').className=''; $('combo').textContent='';
   $('winBonus').classList.add('hidden');
@@ -427,9 +429,9 @@ function updateXp(){
 function maxMult(){ return Math.min(12, 5 + (M.mult||0) + G.up.mult); }
 function mult(){ return Math.min(maxMult(), 1 + Math.floor(G.combo/5)); }
 function starValue(){ return 10 + (M.val||0)*2 + G.up.value*2; }
-function laserDmg(){ return 15 + (M.laserDmg||0)*5; }
-function laserRecharge(){ return Math.max(2, 8 - (M.laserCd||0)); }
-function laserMaxCh(){ return Math.min(4, 1 + (M.laserCh||0) + G.up.laserMax); }
+function laserDmg(){ return 8 + (M.laserDmg||0)*4; }
+function laserRecharge(){ return Math.max(5, 9 - (M.laserCd||0)); }
+function laserMaxCh(){ return Math.min(3, 1 + (M.laserCh||0) + G.up.laserMax); }
 
 function catchStar(it){
   const m = mult();
@@ -445,7 +447,7 @@ function catchStar(it){
   if(G.xp >= G.xpNeed) levelUp();
 }
 function catchGem(it){
-  G.combo++; G.score += 25; G.runDust += 3; G.xp += 3;
+  G.combo++; G.score += 25; G.runDust += 3; G.xp += 2;
   $('score').textContent = G.score;
   burst(it.x,it.y,'#7dffc8',16,220);
   addText(it.x, it.y-10, '+25 💎', '#7dffc8', 15);
@@ -453,9 +455,9 @@ function catchGem(it){
   if(G.xp >= G.xpNeed) levelUp();
 }
 function catchPower(it){
-  if(it.type==='magnet'){ G.power={type:'magnet',t:8}; addText(it.x,it.y-10,'🧲 Магнит!','#7dffc8',17); }
+  if(it.type==='magnet'){ G.power={type:'magnet',t:6}; addText(it.x,it.y-10,'🧲 Магнит!','#7dffc8',17); }
   else if(it.type==='shield'){ G.shield=Math.min(G.shieldMax, G.shield+40); renderShield(); addText(it.x,it.y-10,'🛡 Щит +40!','#9be8ff',17); }
-  else if(it.type==='slow'){ G.power={type:'slow',t:6}; addText(it.x,it.y-10,'🐌 Замедление!','#f0abfc',17); }
+  else if(it.type==='slow'){ G.power={type:'slow',t:5}; addText(it.x,it.y-10,'🐌 Замедление!','#f0abfc',17); }
   burst(it.x,it.y,'#7dffc8',20,220); sfx.power();
 }
 function catchHeart(it){
@@ -465,7 +467,7 @@ function catchHeart(it){
 }
 
 function levelUp(){
-  G.level++; G.xp=0; G.xpNeed = 5 + G.level*3;
+  G.level++; G.xp=0; G.xpNeed = 6 + G.level*4;
   updateXp(); sfx.upg(); banner('УРОВЕНЬ '+G.level+'!', '#ffd75e', 26);
   openUpgrade();
 }
@@ -489,9 +491,9 @@ function chooseUpgrade(id){
   const u = RUN_UPGRADES.find(x=>x.id===id);
   if(!u) return;
   switch(u.id){
-    case 'magnet': G.power={type:'magnet',t:8}; break;
-    case 'shield': G.shieldMax += 30; G.shield=Math.min(G.shieldMax,G.shield+30); renderShield(); break;
-    case 'slow':   G.power={type:'slow',t:6}; break;
+    case 'magnet': G.power={type:'magnet',t:6}; break;
+    case 'shield': G.shieldMax += 25; G.shield=Math.min(G.shieldMax,G.shield+25); renderShield(); break;
+    case 'slow':   G.power={type:'slow',t:5}; break;
     case 'laser':  G.up.laserMax++; break;
     case 'maxhp':  G.up.maxhp++; G.maxLives++; G.lives=G.maxLives; renderHearts(); break;
     case 'mult':   G.up.mult++; break;
@@ -500,7 +502,7 @@ function chooseUpgrade(id){
     case 'combo':  G.up.comboKeep=true; break;
     case 'crit':   G.up.crit=true; break;
     case 'heal':   G.lives=Math.min(G.maxLives, G.lives+1); renderHearts(); break;
-    case 'rain':   G.rain += 14; break;
+    case 'rain':   G.rain += 10; break;
   }
   $('upg').classList.add('hidden');
   G.state='playing';
@@ -544,7 +546,7 @@ function fireLaser(){
   if(G.laser.ch<=0 || G.beamT>0) return;
   G.laser.ch--; G.beamT=0.35;
   sfx.laser(); G.shake=Math.max(G.shake,0.3);
-  const hw = 50;
+  const hw = 40;
   for(const it of items){
     if(it.dead) continue;
     const isEnemy = ['meteor','fast','tank','split','zigzag'].includes(it.type);
@@ -570,8 +572,8 @@ function destroyEnemy(it){
   it.dead = true;
   G.score += 5; $('score').textContent = G.score;
   burst(it.x,it.y, it.type==='tank' ? '#ff9a5e' : '#9be8ff', 18, 220);
-  if(it.type==='split'){ spawnEnemyAt(it.x-14,it.y,'fast',260); spawnEnemyAt(it.x+14,it.y,'fast',260); }
-  if(it.type==='tank' && Math.random()<0.3){ addItem('heart', it.x, it.y, rand(100,150), 14); }
+  if(it.type==='split'){ spawnEnemyAt(it.x-14,it.y,'fast',300); spawnEnemyAt(it.x+14,it.y,'fast',300); }
+  if(it.type==='tank' && Math.random()<0.15){ addItem('heart', it.x, it.y, rand(100,150), 14); }
 }
 function killBoss(){
   const b = G.boss; G.boss=null;
@@ -588,7 +590,7 @@ function killBoss(){
 function isEnemyType(t){ return t==='meteor'||t==='fast'||t==='tank'||t==='split'||t==='zigzag'; }
 function hitPlayer(it){
   if(G.invuln>0){ if(isEnemyType(it.type)) destroyEnemy(it); return; }
-  const dmg = it.type==='boss' ? 60 : 20; // пуля босса = 20, контакт босса = 60
+  const dmg = it.type==='boss' ? 60 : (it.type==='bullet' ? 25 : 40);
   if(G.shield > 0){
     G.shield = Math.max(0, G.shield - dmg);
     renderShield();
@@ -600,7 +602,7 @@ function hitPlayer(it){
     return;
   }
   G.lives--; G.combo=0; $('combo').className=''; $('combo').textContent='';
-  renderHearts(); G.shake=1; G.invuln=1.5; G.power=null;
+  renderHearts(); G.shake=1; G.invuln=1.2; G.power=null;
   burst(player.x,player.y-10,'#ff5d6c',26,240);
   addText(player.x,player.y-70,'−♥','#ff5d6c',22); sfx.hit();
   if(isEnemyType(it.type)) destroyEnemy(it);
@@ -609,17 +611,17 @@ function hitPlayer(it){
 
 /* ================= ЛОГИКА ================= */
 function update(dt){
-  const ts = (G.power && G.power.type==='slow') ? 0.55 : 1;
+  const ts = (G.power && G.power.type==='slow') ? 0.7 : 1;
   G.t += dt;
   if(!G.boss){
     G.waveTimer += dt;
-    if(G.waveTimer >= 20){ G.waveTimer=0; G.wave++; $('waveHud').textContent=G.wave;
+    if(G.waveTimer >= 16){ G.waveTimer=0; G.wave++; $('waveHud').textContent=G.wave;
       banner('ВОЛНА '+G.wave, '#7dd3fc', 24);
       if(G.wave%5===0 && G.wave<=25) spawnBoss();
     }
   }
   const spdMul = 1 + (M.speed||0)*0.05 + G.up.speed*0.12;
-  G.speed = Math.min(460, (125 + G.wave*13)) * spdMul;
+  G.speed = Math.min(520, (140 + G.wave*16)) * spdMul;
   G.invuln = Math.max(0, G.invuln - dt);
   if(G.power){ G.power.t -= dt; if(G.power.t<=0) G.power=null; }
 
@@ -632,9 +634,9 @@ function update(dt){
   if(G.beamT>0) G.beamT -= dt;
 
   // игрок
-  const accel = 2600*spdMul, maxV = 640*spdMul;
+  const accel = 2400*spdMul, maxV = 560*spdMul;
   if(player.targetX!==null){
-    player.x = lerp(player.x, player.targetX, 1-Math.pow(0.0005, dt));
+    player.x = lerp(player.x, player.targetX, 1-Math.pow(0.02, dt));
     if(Math.abs(player.x-player.targetX)<1) player.targetX=null;
   } else {
     if(keys.left)  player.vx -= accel*dt;
@@ -648,7 +650,11 @@ function update(dt){
   // спавн
   if(!G.boss){
     G.spawnT -= dt*ts;
-    if(G.spawnT<=0){ spawn(); G.spawnT = Math.max(0.30, 0.9 - G.wave*0.05); }
+    if(G.spawnT<=0){
+      spawn();
+      if(G.wave>=8 && Math.random()<0.25) spawn();
+      G.spawnT = Math.max(0.20, 0.8 - G.wave*0.05);
+    }
   }
 
   // босс
@@ -656,8 +662,8 @@ function update(dt){
     const b = G.boss;
     b.t += dt;
 
-    // ярость босса 5 при HP < 40%
-    if(b.n>=5 && !b.enraged && b.hp/b.maxHp < 0.4){
+    // ярость босса 5 при HP < 50%
+    if(b.n>=5 && !b.enraged && b.hp/b.maxHp < 0.5){
       b.enraged = true;
       banner('ЯРОСТЬ!', '#ff5d6c', 26);
       sfx.boss();
@@ -669,7 +675,8 @@ function update(dt){
       const p = clamp(b.sweep.t/b.sweep.dur, 0, 1);
       b.x = lerp(b.sweep.x0, b.sweep.x1, p);
       b.y = b.sweep.y;
-      if(p>=1){ b.sweep=null; b.attackT=4; }
+      if(b.sweep.shots<2 && p >= 0.3 + b.sweep.shots*0.35){ volley(b,2); b.sweep.shots++; }
+      if(p>=1){ b.sweep=null; b.attackT=3.5; }
     } else {
       b.x = W/2 + Math.sin(b.t*0.55)*W*0.28*em;
       b.y = Math.max(70, H*0.3 + Math.sin(b.t*0.9)*18*em);
@@ -678,8 +685,9 @@ function update(dt){
     // спавн врагов
     b.spawnT -= dt;
     if(b.spawnT<=0){
-      b.spawnT = b.enraged ? 1.4 : 2.2;
-      spawnEnemyAt(b.x+rand(-30,30), b.y+30, 'fast', 200+G.wave*6);
+      b.spawnT = b.enraged ? 1.0 : 1.8;
+      spawnEnemyAt(b.x+rand(-30,30), b.y+30, 'fast', 240+G.wave*8);
+      if(Math.random()<0.4) spawnEnemyAt(b.x+rand(-30,30), b.y+30, 'fast', 240+G.wave*8);
     }
 
     // специальные атаки
@@ -699,7 +707,7 @@ function update(dt){
     bl.x += bl.vx*dt; bl.y += bl.vy*dt;
     if(bl.x<-40||bl.x>W+40||bl.y<-40||bl.y>H+40){ bl.dead=true; continue; }
     const dx = bl.x-player.x, dy = bl.y-py;
-    if(dx*dx+dy*dy < (bl.r+18)*(bl.r+18)){
+    if(dx*dx+dy*dy < (bl.r+20)*(bl.r+20)){
       bl.dead=true;
       hitPlayer({ type:'bullet', x:bl.x, y:bl.y, r:bl.r });
     }
@@ -714,7 +722,7 @@ function update(dt){
 
     if(G.power && G.power.type==='magnet' && (it.type==='star'||it.type==='gem')){
       const dx = player.x-it.x, dy = py-it.y, d = Math.hypot(dx,dy);
-      if(d<190){ it.x += (dx/d)*360*dt; it.y += (dy/d)*360*dt; }
+      if(d<150){ it.x += (dx/d)*320*dt; it.y += (dy/d)*320*dt; }
     }
     if(it.type==='zigzag') it.x = it.baseX + Math.sin(it.y*0.02 + it.phase)*60;
 
@@ -798,7 +806,7 @@ function drawEnemy(it){
       ctx.strokeStyle='#ff8a5e';
       for(let i=0;i<3;i++){ ctx.beginPath(); ctx.moveTo(0,0); ctx.arc(0,0,it.r*.8, i*2.1, i*2.1+0.7); ctx.stroke(); }
       ctx.fillStyle='rgba(0,0,0,.55)'; ctx.fillRect(-it.r, -it.r-10, it.r*2, 5);
-      ctx.fillStyle='#ff8a5e'; ctx.fillRect(-it.r, -it.r-10, it.r*2*(it.hp/3), 5);
+      ctx.fillStyle='#ff8a5e'; ctx.fillRect(-it.r, -it.r-10, it.r*2*(it.hp/it.maxHp), 5);
       ctx.restore(); break;
     case 'split':
       ctx.save(); ctx.translate(it.x,it.y); ctx.rotate(it.rot);
@@ -866,9 +874,9 @@ function drawBeam(){
   const g = ctx.createLinearGradient(px, H-70, px, 0);
   g.addColorStop(0,'rgba(160,230,255,.95)'); g.addColorStop(1,'rgba(125,211,252,.12)');
   ctx.fillStyle=g;
-  ctx.fillRect(px-46, 0, 92, H-70);
+  ctx.fillRect(px-38, 0, 76, H-70);
   ctx.fillStyle='rgba(220,250,255,.9)';
-  ctx.fillRect(px-5, 0, 10, H-70);
+  ctx.fillRect(px-4, 0, 8, H-70);
 }
 function drawPlayer(){
   const px=player.x, py=H-74;
@@ -886,7 +894,7 @@ function drawPlayer(){
   }
   if(G.power && G.power.type==='magnet'){
     ctx.strokeStyle='rgba(125,255,200,.5)'; ctx.setLineDash([6,6]);
-    ctx.beginPath(); ctx.arc(px,py,190,0,Math.PI*2); ctx.stroke(); ctx.setLineDash([]);
+    ctx.beginPath(); ctx.arc(px,py,150,0,Math.PI*2); ctx.stroke(); ctx.setLineDash([]);
   }
   const flick = rand(.7,1.3);
   ctx.fillStyle='rgba(255,150,60,.9)'; ctx.shadowColor='#ff9a3d'; ctx.shadowBlur=14;
@@ -914,7 +922,7 @@ function drawPlayer(){
     ctx.fillStyle='rgba(0,0,0,.35)';
     ctx.fillRect(px-45,py-52,90,6);
     ctx.fillStyle=colors[G.power.type]||'#7dd3fc';
-    ctx.fillRect(px-45,py-52,90*(G.power.t/(G.power.type==='magnet'?8:6)),6);
+    ctx.fillRect(px-45,py-52,90*(G.power.t/(G.power.type==='magnet'?6:5)),6);
   }
 }
 function drawBoss(){
@@ -934,14 +942,12 @@ function drawBoss(){
   ctx.beginPath(); ctx.arc(b.x+b.r*.3,b.y-b.r*.15,b.r*.11,0,Math.PI*2); ctx.fill();
   ctx.shadowBlur=0;
 
-  // мини-бар над боссом
   const bw2 = b.r*2;
   ctx.fillStyle='rgba(0,0,0,.55)'; ctx.fillRect(b.x-bw2/2, b.y-b.r-16, bw2, 6);
   const bg2 = ctx.createLinearGradient(b.x-bw2/2,0,b.x+bw2/2,0);
   bg2.addColorStop(0,'#ff5d6c'); bg2.addColorStop(1,'#ffd75e');
   ctx.fillStyle=bg2; ctx.fillRect(b.x-bw2/2, b.y-b.r-16, bw2*frac, 6);
 
-  // большая шкала внизу + номер босса
   const bw = Math.min(420, W-40), bh=14, bx=W/2-bw/2, by=H-46;
   ctx.fillStyle='rgba(0,0,0,.65)'; ctx.fillRect(bx-2,by-2,bw+4,bh+4);
   ctx.fillStyle='rgba(20,30,70,.9)'; ctx.fillRect(bx,by,bw,bh);
