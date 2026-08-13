@@ -1046,13 +1046,24 @@ window.addEventListener('pointerup', e=>{
 });
 window.addEventListener('resize', ()=>{ W=cv.width=innerWidth; H=cv.height=innerHeight; buildBg(); player.x=clamp(player.x,player.w/2,W-player.w/2); });
 
-/* ================= UI: КНОПКИ И МАГАЗИН ================= */
-$('startBtn').addEventListener('click', ()=>{ sfx.click(); startGame(); });
-$('againBtn').addEventListener('click', ()=>{ sfx.click(); startGame(); });
-$('toMenuBtn').addEventListener('click', ()=>{ sfx.click(); G.state='menu'; $('over').classList.add('hidden'); $('menu').classList.remove('hidden'); });
-$('shopBtn').addEventListener('click', ()=>{ sfx.click(); $('menu').classList.add('hidden'); renderShop(); $('shop').classList.remove('hidden'); });
-$('shopBack').addEventListener('click', ()=>{ sfx.click(); $('shop').classList.add('hidden'); $('menu').classList.remove('hidden'); });
-
+// Кнопки — pointerdown, чтобы работало на мобильных при touch-action:none
+function btnHandler(fn){
+  return e => { e.stopPropagation(); sfx.click(); fn(e); };
+}
+$('startBtn').addEventListener('pointerdown', btnHandler(startGame));
+$('againBtn').addEventListener('pointerdown', btnHandler(startGame));
+$('toMenuBtn').addEventListener('pointerdown', (e)=>{
+  e.stopPropagation(); sfx.click();
+  G.state='menu'; $('over').classList.add('hidden'); $('menu').classList.remove('hidden');
+});
+$('shopBtn').addEventListener('pointerdown', (e)=>{
+  e.stopPropagation(); sfx.click();
+  $('menu').classList.add('hidden'); renderShop(); $('shop').classList.remove('hidden');
+});
+$('shopBack').addEventListener('pointerdown', (e)=>{
+  e.stopPropagation(); sfx.click();
+  $('shop').classList.add('hidden'); $('menu').classList.remove('hidden');
+});
 function renderShop(){
   $('shopDust').textContent = G.dust;
   const list = $('shopList'); list.innerHTML='';
