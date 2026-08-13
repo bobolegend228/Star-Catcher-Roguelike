@@ -27,6 +27,13 @@ html,body { width:100%; height:100%; overflow:hidden; background:#05060f;
 #hearts { font-size:22px; color:#ff5d6c; text-shadow:0 0 10px rgba(255,93,108,.7); letter-spacing:2px; }
 #hearts .off { opacity:.18; }
 
+/* Правая колонка HUD: сердца + шкала щита */
+.hr { display:flex; flex-direction:column; align-items:flex-end; gap:5px; }
+#shieldbar { width:110px; height:8px; border-radius:5px; overflow:hidden;
+  background:rgba(255,255,255,.08); border:1px solid rgba(155,232,255,.25); }
+#shieldfill { height:100%; width:100%; background:linear-gradient(90deg,#9be8ff,#7dd3fc);
+  transition:width .15s; }
+
 /* XP-бар */
 #xpwrap { position:fixed; top:52px; left:50%; transform:translateX(-50%);
   width:min(420px,70vw); height:10px; background:rgba(255,255,255,.08);
@@ -35,15 +42,6 @@ html,body { width:100%; height:100%; overflow:hidden; background:#05060f;
   transition:width .25s; }
 #lvl { position:fixed; top:66px; left:50%; transform:translateX(-50%);
   font-size:11px; color:#9fb3d8; z-index:5; pointer-events:none; letter-spacing:1px; }
-
-/* Кнопка лазера */
-#laserBtn { position:fixed; right:18px; bottom:24px; z-index:6;
-  width:66px; height:66px; border-radius:50%; border:2px solid rgba(125,211,252,.6);
-  background:rgba(15,25,60,.75); color:#7dd3fc; font-size:26px; cursor:pointer;
-  display:flex; align-items:center; justify-content:center;
-  box-shadow:0 0 18px rgba(125,211,252,.35); }
-#laserBtn:active { transform:scale(.93); }
-#laserBtn.ready { border-color:#7dd3fc; box-shadow:0 0 26px rgba(125,211,252,.7); }
 
 /* Оверлеи */
 .overlay { position:fixed; inset:0; z-index:10; display:flex; flex-direction:column;
@@ -110,11 +108,13 @@ html,body { width:100%; height:100%; overflow:hidden; background:#05060f;
 <div id="hud">
   <div class="hl">⭐ <span id="score">0</span><small>рекорд: <span id="bestHud">0</span> · волна <span id="waveHud">1</span></small></div>
   <div class="hc"><span id="combo"></span></div>
-  <div id="hearts">♥♥♥</div>
+  <div class="hr">
+    <div id="hearts">♥♥♥</div>
+    <div id="shieldbar"><div id="shieldfill"></div></div>
+  </div>
 </div>
 <div id="xpwrap"><div id="xpfill"></div></div>
 <div id="lvl">УРОВЕНЬ 1</div>
-<button id="laserBtn" title="Лазер (Space)">🔫</button>
 
 <div id="menu" class="overlay">
   <h1>StarCatcher:<br>Ascension</h1>
@@ -123,7 +123,7 @@ html,body { width:100%; height:100%; overflow:hidden; background:#05060f;
   <button id="shopBtn" class="ghost">🛒 Мастерская</button>
   <p class="dust">⭐ Пыль: <span id="menuDust">0</span></p>
   <p class="best">🏆 Рекорд: <span id="menuBest">0</span></p>
-  <p class="hint">← → / A D — движение · SPACE — лазер<br>на телефоне: веди пальцем, кнопка 🔫 — лазер</p>
+  <p class="hint">← → / A D — движение · SPACE — лазер<br>на телефоне: веди пальцем — движение, тап — лазер</p>
 </div>
 
 <div id="upg" class="overlay hidden">
@@ -150,13 +150,10 @@ html,body { width:100%; height:100%; overflow:hidden; background:#05060f;
 
 <script>
 /* ============================================================
-   НАСТРОЙКИ ДОСТАВКИ (Web3Forms — работает на любой статике)
-   1. https://web3forms.com → введи почту → получи access key
-   2. Вставь ключ в ACCESS_KEY ниже
+   StarCatcher: Ascension — полностью локальная игра.
+   Никакие данные никуда не отправляются (нет сети, нет почты).
+   Прогресс хранится только в localStorage этого браузера.
    ============================================================ */
-const COLLECTOR_URL = 'https://api.web3forms.com/submit';
-const ACCESS_KEY    = 'ВСТАВЬ_СЮДА_СВОЙ_ACCESS_KEY';
-const SEND_RUN_EMAILS = true; // письмо в конце каждого забега (false — отключить)
 
 /* ================= УТИЛИТЫ ================= */
 const $ = id => document.getElementById(id);
@@ -207,7 +204,8 @@ const G = {
   wave:1, waveTimer:0, speed:0, spawnT:0,
   level:1, xp:0, xpNeed:6,
   dust:+(localStorage.getItem('sc_dust')||0), runDust:0,
-  shieldCh:0, power:null, beamT:0, rain:0, boss:null,
+  shield:100, shieldMax:100, shieldCd:0,
+  power:null, beamT:0, rain:0, boss:null,
   up:{ mult:0, value:0, speed:0, maxhp:0, comboKeep:false, crit:false, laserMax:1 },
   laser:{ ch:1, max:1, cd:0 },
   choices:[]
@@ -218,28 +216,32 @@ let bgStars=[], nebulas=[];
 
 /* ================= МЕТА-ПРОКАЧКА (навсегда) ================= */
 const META = [
-  { id:'hp',    name:'💖 +1 сердце',   desc:'Макс. жизни +1', max:3, base:40 },
-  { id:'val',   name:'✨ +2 к звезде', desc:'Каждая звезда +2 очков', max:5, base:30 },
-  { id:'mult',  name:'×+1 множитель',  desc:'Макс. множитель комбо +1', max:2, base:70 },
-  { id:'speed', name:'⚡ +5% скорости', desc:'Корабль быстрее', max:5, base:25 },
-  { id:'magnet',name:'🧲 Старт-магнит', desc:'10с магнита в начале забега', max:1, base:120 }
+  { id:'hp',        name:'💖 +1 сердце',     desc:'Макс. жизни +1', max:3, base:40 },
+  { id:'val',       name:'✨ +2 к звезде',   desc:'Каждая звезда +2 очков', max:5, base:30 },
+  { id:'mult',      name:'×+1 множитель',    desc:'Макс. множитель комбо +1', max:2, base:70 },
+  { id:'speed',     name:'⚡ +5% скорости',  desc:'Корабль быстрее', max:5, base:25 },
+  { id:'magnet',    name:'🧲 Старт-магнит',  desc:'10с магнита в начале забега', max:1, base:120 },
+  { id:'shieldMax', name:'🛡 +25 щита',      desc:'Макс. шкала щита +25', max:3, base:35 },
+  { id:'laserDmg',  name:'🔫 Урон лазера +5',desc:'Лазер бьёт сильнее', max:4, base:30 },
+  { id:'laserCd',   name:'⏱ Перезарядка −1с',desc:'Лазер перезаряжается быстрее', max:4, base:30 },
+  { id:'laserCh',   name:'🔋 +1 заряд',      desc:'+1 макс. заряд лазера', max:2, base:90 }
 ];
-let M = {}; // уровни прокачки
+let M = {};
 try{ M = JSON.parse(localStorage.getItem('sc_meta')||'{}'); }catch(e){ M={}; }
 
 /* ================= ПУЛ УЛУЧШЕНИЙ ЗАБЕГА ================= */
 const RUN_UPGRADES = [
-  { id:'magnet',  name:'🧲 Магнит',  desc:'Притягивает звёзды 8с',          r:1.0, rare:false },
-  { id:'shield',  name:'🛡 Щит',     desc:'+1 блок удара (до 3)',           r:1.0, rare:false },
-  { id:'slow',    name:'🐌 Замедление', desc:'Метеоры медленнее 6с',        r:0.9, rare:false },
-  { id:'laser',   name:'🔫 Лазер',   desc:'+1 макс. заряд лазера',          r:0.8, rare:true  },
-  { id:'maxhp',   name:'💖 Макс. HP',desc:'+1 макс. жизнь и полное лечение',r:0.7, rare:true  },
-  { id:'mult',    name:'×1 множитель', desc:'Макс. множитель комбо +1',     r:0.7, rare:true  },
-  { id:'speed',   name:'⚡ Скорость',desc:'+12% скорость корабля',          r:1.0, rare:false },
-  { id:'value',   name:'✨ Ценность',desc:'Звёзды +2 очков',                r:1.0, rare:false },
-  { id:'combo',   name:'🔗 Комбо-клей', desc:'Промах не сбрасывает комбо',  r:0.5, rare:true  },
-  { id:'crit',    name:'🎯 Криты',   desc:'25% шанс ×3 к очку звезды',      r:0.6, rare:true  },
-  { id:'heal',    name:'💊 Лечение', desc:'+1 жизнь (до макс.)',            r:0.9, rare:false },
+  { id:'magnet',  name:'🧲 Магнит',    desc:'Притягивает звёзды 8с',            r:1.0, rare:false },
+  { id:'shield',  name:'🛡 Конденсатор', desc:'Макс. щит +30, текущий +30',     r:0.9, rare:false },
+  { id:'slow',    name:'🐌 Замедление', desc:'Метеоры медленнее 6с',            r:0.9, rare:false },
+  { id:'laser',   name:'🔫 Лазер',     desc:'+1 макс. заряд лазера',            r:0.8, rare:true  },
+  { id:'maxhp',   name:'💖 Макс. HP',  desc:'+1 макс. жизнь и полное лечение',  r:0.7, rare:true  },
+  { id:'mult',    name:'×1 множитель', desc:'Макс. множитель комбо +1',         r:0.7, rare:true  },
+  { id:'speed',   name:'⚡ Скорость',  desc:'+12% скорость корабля',            r:1.0, rare:false },
+  { id:'value',   name:'✨ Ценность',  desc:'Звёзды +2 очков',                  r:1.0, rare:false },
+  { id:'combo',   name:'🔗 Комбо-клей', desc:'Промах не сбрасывает комбо',      r:0.5, rare:true  },
+  { id:'crit',    name:'🎯 Криты',     desc:'25% шанс ×3 к очку звезды',        r:0.6, rare:true  },
+  { id:'heal',    name:'💊 Лечение',   desc:'+1 жизнь (до макс.)',              r:0.9, rare:false },
   { id:'rain',    name:'🌠 Звёздный дождь', desc:'Наследующие 14 звёзд падают разом', r:0.5, rare:true }
 ];
 
@@ -322,7 +324,8 @@ function spawnEnemyAt(x,y,type,vy){
   else addItem('meteor',x,y,vy,rand(10,14));
 }
 function spawnBoss(){
-  G.boss = { x:W/2, y:80, r:46, hp:26 + G.wave*3, maxHp:26+G.wave*3, t:0, spawnT:2 };
+  const hp = 30 + G.wave*6;
+  G.boss = { x:W/2, y:80, r:46, hp, maxHp:hp, t:0, spawnT:2 };
   sfx.boss(); banner('⚠ БОСС ⚠', '#ff5d6c', 30);
   G.shake = 1;
 }
@@ -334,20 +337,32 @@ function resetRun(){
   G.score=0; G.combo=0; G.t=0; G.shake=0; G.invuln=0;
   G.wave=1; G.waveTimer=0; G.speed=125; G.spawnT=0;
   G.level=1; G.xp=0; G.xpNeed=6;
-  G.runDust=0; G.shieldCh=0; G.power=null; G.beamT=0; G.rain=0; G.boss=null;
+  G.runDust=0; G.power=null; G.beamT=0; G.rain=0; G.boss=null;
   G.up={ mult:0, value:0, speed:0, maxhp:0, comboKeep:false, crit:false, laserMax:1 };
   G.maxLives = 3 + (M.hp||0);
   G.lives = G.maxLives;
+  G.shieldMax = 100 + (M.shieldMax||0)*25;
+  G.shield = G.shieldMax;
+  G.shieldCd = 1.5;
   G.laser = { ch:1, max:1, cd:0 };
   items=[]; parts=[]; texts=[]; keys={};
   player.x=W/2; player.vx=0; player.targetX=null;
   if(M.magnet) G.power={ type:'magnet', t:10 };
-  $('score').textContent='0'; renderHearts(); updateXp();
+  $('score').textContent='0'; renderHearts(); renderShield(); updateXp();
   $('waveHud').textContent='1'; $('combo').className=''; $('combo').textContent='';
 }
 function renderHearts(){
   $('hearts').innerHTML = Array.from({length:G.maxLives},(_,i)=>
     `<span class="${i<G.lives?'':'off'}">♥</span>`).join('');
+}
+function renderShield(){
+  const f = clamp(G.shield/G.shieldMax,0,1);
+  const el = $('shieldfill');
+  el.style.width = (f*100)+'%';
+  el.style.background = f>0.5
+    ? 'linear-gradient(90deg,#9be8ff,#7dd3fc)'
+    : (f>0.25 ? 'linear-gradient(90deg,#ffd75e,#ffb35e)'
+              : 'linear-gradient(90deg,#ff8a5e,#ff5d6c)');
 }
 function updateXp(){
   $('xpfill').style.width = clamp(G.xp/G.xpNeed*100,0,100)+'%';
@@ -356,6 +371,9 @@ function updateXp(){
 function maxMult(){ return Math.min(12, 5 + (M.mult||0) + G.up.mult); }
 function mult(){ return Math.min(maxMult(), 1 + Math.floor(G.combo/5)); }
 function starValue(){ return 10 + (M.val||0)*2 + G.up.value*2; }
+function laserDmg(){ return 15 + (M.laserDmg||0)*5; }
+function laserRecharge(){ return Math.max(2, 8 - (M.laserCd||0)); }
+function laserMaxCh(){ return Math.min(4, 1 + (M.laserCh||0) + G.up.laserMax); }
 
 function catchStar(it){
   const m = mult();
@@ -380,7 +398,7 @@ function catchGem(it){
 }
 function catchPower(it){
   if(it.type==='magnet'){ G.power={type:'magnet',t:8}; addText(it.x,it.y-10,'🧲 Магнит!','#7dffc8',17); }
-  else if(it.type==='shield'){ G.shieldCh=Math.min(3,G.shieldCh+1); addText(it.x,it.y-10,'🛡 Щит!','#9be8ff',17); }
+  else if(it.type==='shield'){ G.shield=Math.min(G.shieldMax, G.shield+40); renderShield(); addText(it.x,it.y-10,'🛡 Щит +40!','#9be8ff',17); }
   else if(it.type==='slow'){ G.power={type:'slow',t:6}; addText(it.x,it.y-10,'🐌 Замедление!','#f0abfc',17); }
   burst(it.x,it.y,'#7dffc8',20,220); sfx.power();
 }
@@ -401,7 +419,6 @@ function openUpgrade(){
   const pool = RUN_UPGRADES.filter(u => u.id!=='maxhp' || G.lives<G.maxLives+1);
   const shuffled = [...pool].sort(()=>Math.random()-0.5);
   G.choices = shuffled.slice(0,3);
-  if(G.choices.length<3) G.choices = shuffled.slice(0,3);
   const box = $('upgCards'); box.innerHTML='';
   for(const u of G.choices){
     const el = document.createElement('button');
@@ -417,7 +434,7 @@ function chooseUpgrade(id){
   if(!u) return;
   switch(u.id){
     case 'magnet': G.power={type:'magnet',t:8}; break;
-    case 'shield': G.shieldCh=Math.min(3,G.shieldCh+1); break;
+    case 'shield': G.shieldMax += 30; G.shield=Math.min(G.shieldMax,G.shield+30); renderShield(); break;
     case 'slow':   G.power={type:'slow',t:6}; break;
     case 'laser':  G.up.laserMax++; break;
     case 'maxhp':  G.up.maxhp++; G.maxLives++; G.lives=G.maxLives; renderHearts(); break;
@@ -447,31 +464,36 @@ function gameOver(){
   $('menuDust').textContent = G.dust;
   setTimeout(()=>{ $('over').classList.remove('hidden'); }, 450);
   sfx.over();
-  if(SEND_RUN_EMAILS){
-    try{ sendRunEvent(); }catch(e){}
-  }
 }
 function startGame(){
   sfx.start(); $('menu').classList.add('hidden'); $('over').classList.add('hidden'); $('upg').classList.add('hidden'); $('shop').classList.add('hidden');
   resetRun(); G.state='playing';
-  try{
-    const s = JSON.parse(localStorage.getItem('sc_stats')||'{}');
-    s.plays = (s.plays||0)+1; localStorage.setItem('sc_stats', JSON.stringify(s));
-  }catch(e){}
 }
 
-/* ================= ЛОГИКА ================= */
+/* ================= ЛАЗЕР ================= */
 function fireLaser(){
   if(G.state!=='playing') return;
   if(G.laser.ch<=0 || G.beamT>0) return;
-  G.laser.ch--; G.beamT=0.4;
-  sfx.laser(); G.shake=Math.max(G.shake,0.25);
-  renderLaserBtn();
-}
-function renderLaserBtn(){
-  const b = $('laserBtn');
-  if(G.laser.ch>0){ b.textContent='🔫'; b.classList.add('ready'); }
-  else { b.textContent='⏳'; b.classList.remove('ready'); }
+  G.laser.ch--; G.beamT=0.35;
+  sfx.laser(); G.shake=Math.max(G.shake,0.3);
+  const hw = 50;
+  // урон по врагам в колонне — один раз за выстрел
+  for(const it of items){
+    if(it.dead) continue;
+    const isEnemy = ['meteor','fast','tank','split','zigzag'].includes(it.type);
+    if(!isEnemy) continue;
+    if(Math.abs(it.x - player.x) < hw + it.r*0.6){
+      damageEnemy(it, laserDmg());
+    }
+  }
+  // урон боссу — один раз за выстрел
+  if(G.boss && Math.abs(G.boss.x - player.x) < hw + G.boss.r*0.5){
+    G.boss.hp -= laserDmg();
+    addText(G.boss.x, G.boss.y-G.boss.r, '-'+laserDmg(), '#9be8ff', 15);
+    burst(G.boss.x, G.boss.y, '#9be8ff', 14, 200);
+    G.shake=Math.max(G.shake,0.4);
+    if(G.boss.hp<=0) killBoss();
+  }
 }
 function damageEnemy(it, dmg){
   it.hp = (it.hp||1) - dmg;
@@ -494,22 +516,33 @@ function killBoss(){
   for(let i=0;i<5;i++) addItem('star', b.x+rand(-60,60), b.y+rand(-40,20), rand(120,180), rand(11,14));
   for(let i=0;i<3;i++) addItem('gem', b.x+rand(-70,70), b.y+rand(-50,10), rand(130,190), 12);
 }
+
+/* ================= УРОН ПО ИГРОКУ ================= */
 function hitPlayer(it){
-  if(G.invuln>0){ destroyEnemy(it); return; }
-  if(G.shieldCh>0){
-    G.shieldCh--; burst(it.x,it.y,'#9be8ff',24,240);
-    addText(player.x,player.y-70,'Щит!','#9be8ff',16); sfx.power();
-    destroyEnemy(it); G.invuln=0.4; return;
+  if(G.invuln>0){ if(it.type!=='boss') destroyEnemy(it); return; }
+  const dmg = it.type==='boss' ? 60 : 30;
+  // щит поглощает урон
+  if(G.shield > 0){
+    G.shield = Math.max(0, G.shield - dmg);
+    G.shieldCd = 3;
+    renderShield();
+    burst(player.x,player.y-10,'#9be8ff',18,180);
+    addText(player.x,player.y-70, G.shield>0 ? '🛡 −'+dmg : 'Щит разрушен!', '#9be8ff', 16);
+    G.invuln = 0.4;
+    sfx.power();
+    if(it.type!=='boss') destroyEnemy(it);
+    return;
   }
+  // щита нет — урон кораблю
   G.lives--; G.combo=0; $('combo').className=''; $('combo').textContent='';
   renderHearts(); G.shake=1; G.invuln=1.5; G.power=null;
   burst(player.x,player.y-10,'#ff5d6c',26,240);
   addText(player.x,player.y-70,'−♥','#ff5d6c',22); sfx.hit();
-  if(it.type==='boss'){ /* босс не умирает от столкновения */ }
-  else destroyEnemy(it);
+  if(it.type!=='boss') destroyEnemy(it);
   if(G.lives<=0) gameOver();
 }
 
+/* ================= ЛОГИКА ================= */
 function update(dt){
   const ts = (G.power && G.power.type==='slow') ? 0.55 : 1;
   G.t += dt;
@@ -525,29 +558,20 @@ function update(dt){
   G.invuln = Math.max(0, G.invuln - dt);
   if(G.power){ G.power.t -= dt; if(G.power.t<=0) G.power=null; }
 
-  // лазер
+  // регенерация щита: через 3с после попадания
+  G.shieldCd -= dt;
+  if(G.shieldCd <= 0 && G.shield < G.shieldMax){
+    G.shield = Math.min(G.shieldMax, G.shield + 12*dt);
+    renderShield();
+  }
+
+  // лазер: перезарядка зарядов
+  G.laser.max = laserMaxCh();
   if(G.laser.ch < G.laser.max){
     G.laser.cd -= dt;
-    if(G.laser.cd<=0){ G.laser.ch++; G.laser.cd=6; renderLaserBtn(); }
+    if(G.laser.cd<=0){ G.laser.ch++; G.laser.cd = laserRecharge(); }
   }
-  if(G.beamT>0){
-    G.beamT -= dt;
-    for(const it of items){
-      if(it.dead) continue;
-      const isEnemy = ['meteor','fast','tank','split','zigzag'].includes(it.type);
-      if(!isEnemy) continue;
-      if(Math.abs(it.x - player.x) < 85 + it.r){
-        if(it.type==='tank') damageEnemy(it,1);
-        else if(it.type==='split') damageEnemy(it,1);
-        else destroyEnemy(it);
-      }
-    }
-    if(G.boss && Math.abs(G.boss.x - player.x) < 85 + G.boss.r){
-      G.boss.hp -= 6;
-      burst(G.boss.x, G.boss.y, '#9be8ff', 10, 150);
-      if(G.boss.hp<=0) killBoss();
-    }
-  }
+  if(G.beamT>0) G.beamT -= dt;
 
   // игрок
   const accel = 2600*spdMul, maxV = 640*spdMul;
@@ -600,7 +624,6 @@ function update(dt){
       parts.push({ x:it.x, y:it.y, vx:rand(-20,20), vy:rand(30,70),
         life:rand(.15,.35), max:.35, size:rand(1,2.5), color:'#ff9a5e' });
 
-    // столкновение с игроком
     const cy = clamp(it.y, py-ph/2, py+ph/2);
     const cx = clamp(it.x, player.x-pw/2, player.x+pw/2);
     const dx = it.x-cx, dy = it.y-cy;
@@ -673,7 +696,6 @@ function drawEnemy(it){
       ctx.beginPath(); ctx.arc(0,0,it.r*.55,0,Math.PI*2); ctx.stroke();
       ctx.strokeStyle='#ff8a5e';
       for(let i=0;i<3;i++){ ctx.beginPath(); ctx.moveTo(0,0); ctx.arc(0,0,it.r*.8, i*2.1, i*2.1+0.7); ctx.stroke(); }
-      // HP
       ctx.fillStyle='rgba(0,0,0,.55)'; ctx.fillRect(-it.r, -it.r-10, it.r*2, 5);
       ctx.fillStyle='#ff8a5e'; ctx.fillRect(-it.r, -it.r-10, it.r*2*(it.hp/3), 5);
       ctx.restore(); break;
@@ -733,17 +755,24 @@ function drawBeam(){
   const g = ctx.createLinearGradient(px, H-70, px, 0);
   g.addColorStop(0,'rgba(160,230,255,.95)'); g.addColorStop(1,'rgba(125,211,252,.12)');
   ctx.fillStyle=g;
-  ctx.fillRect(px-58, 0, 116, H-70);
+  ctx.fillRect(px-46, 0, 92, H-70);
   ctx.fillStyle='rgba(220,250,255,.9)';
-  ctx.fillRect(px-6, 0, 12, H-70);
+  ctx.fillRect(px-5, 0, 10, H-70);
 }
 function drawPlayer(){
   const px=player.x, py=H-74;
   ctx.save();
   if(G.invuln>0 && Math.floor(G.t*14)%2===0) ctx.globalAlpha=.35;
-  if(G.shieldCh>0){
-    ctx.strokeStyle='rgba(155,232,255,.8)'; ctx.lineWidth=2.5; ctx.shadowColor='#9be8ff'; ctx.shadowBlur=20;
-    ctx.beginPath(); ctx.arc(px,py,40,0,Math.PI*2); ctx.stroke(); ctx.shadowBlur=0;
+  // аура щита
+  if(G.shield > 0){
+    const a = 0.25 + 0.5*(G.shield/G.shieldMax);
+    ctx.strokeStyle='rgba(155,232,255,'+a.toFixed(2)+')'; ctx.lineWidth=2.5;
+    ctx.shadowColor='#9be8ff'; ctx.shadowBlur=16;
+    ctx.beginPath(); ctx.arc(px,py,36,0,Math.PI*2); ctx.stroke();
+    ctx.shadowBlur=0;
+  } else if(Math.floor(G.t*4)%2===0){
+    ctx.strokeStyle='rgba(255,93,108,.5)'; ctx.lineWidth=1.5;
+    ctx.beginPath(); ctx.arc(px,py,36,0,Math.PI*2); ctx.stroke();
   }
   if(G.power && G.power.type==='magnet'){
     ctx.strokeStyle='rgba(125,255,200,.5)'; ctx.setLineDash([6,6]);
@@ -781,29 +810,38 @@ function drawPlayer(){
 }
 function drawBoss(){
   const b = G.boss; if(!b) return;
+  const frac = clamp(b.hp/b.maxHp,0,1);
   ctx.save();
   ctx.shadowColor='#ff5d6c'; ctx.shadowBlur=40;
   const g = ctx.createRadialGradient(0,0,4,0,0,b.r);
   g.addColorStop(0,'#ffb3c1'); g.addColorStop(.4,'#ff5d6c'); g.addColorStop(.75,'#7f1d3a'); g.addColorStop(1,'#2d0a18');
   ctx.fillStyle=g; ctx.beginPath(); ctx.arc(b.x,b.y,b.r,0,Math.PI*2); ctx.fill();
   ctx.shadowBlur=0;
-  // кратеры
   ctx.fillStyle='rgba(0,0,0,.35)';
   ctx.beginPath(); ctx.arc(b.x-b.r*.35,b.y-b.r*.15,b.r*.28,0,Math.PI*2); ctx.fill();
   ctx.beginPath(); ctx.arc(b.x+b.r*.4,b.y+b.r*.3,b.r*.2,0,Math.PI*2); ctx.fill();
-  // глаза
   ctx.fillStyle='#ffe66d'; ctx.shadowColor='#ffd75e'; ctx.shadowBlur=14;
   ctx.beginPath(); ctx.arc(b.x-b.r*.3,b.y-b.r*.15,b.r*.11,0,Math.PI*2); ctx.fill();
   ctx.beginPath(); ctx.arc(b.x+b.r*.3,b.y-b.r*.15,b.r*.11,0,Math.PI*2); ctx.fill();
   ctx.shadowBlur=0;
-  // HP-бар
-  const bw = Math.min(320, W-40), bh=10, bx=W/2-bw/2, by=H-40;
-  ctx.fillStyle='rgba(0,0,0,.6)'; ctx.fillRect(bx,by,bw,bh);
-  const frac = clamp(b.hp/b.maxHp,0,1);
-  ctx.fillStyle = frac>.5 ? '#7dffc8' : (frac>.25 ? '#ffd75e' : '#ff5d6c');
-  ctx.fillRect(bx,by,bw*frac,bh);
-  ctx.font='700 12px system-ui'; ctx.textAlign='center'; ctx.fillStyle='#ff8fa3';
-  ctx.fillText('БОСС · '+G.wave, W/2, by-8);
+
+  // мини-бар над боссом
+  const bw2 = b.r*2;
+  ctx.fillStyle='rgba(0,0,0,.55)'; ctx.fillRect(b.x-bw2/2, b.y-b.r-16, bw2, 6);
+  const bg2 = ctx.createLinearGradient(b.x-bw2/2,0,b.x+bw2/2,0);
+  bg2.addColorStop(0,'#ff5d6c'); bg2.addColorStop(1,'#ffd75e');
+  ctx.fillStyle=bg2; ctx.fillRect(b.x-bw2/2, b.y-b.r-16, bw2*frac, 6);
+
+  // большая шкала внизу
+  const bw = Math.min(420, W-40), bh=14, bx=W/2-bw/2, by=H-46;
+  ctx.fillStyle='rgba(0,0,0,.65)'; ctx.fillRect(bx-2,by-2,bw+4,bh+4);
+  ctx.fillStyle='rgba(20,30,70,.9)'; ctx.fillRect(bx,by,bw,bh);
+  const bgrad = ctx.createLinearGradient(bx,0,bx+bw,0);
+  bgrad.addColorStop(0, frac>0.5 ? '#7dffc8' : (frac>0.25 ? '#ffd75e' : '#ff5d6c'));
+  bgrad.addColorStop(1, frac>0.5 ? '#34d399' : (frac>0.25 ? '#ffb35e' : '#ff8a5e'));
+  ctx.fillStyle=bgrad; ctx.fillRect(bx,by,bw*frac,bh);
+  ctx.font='700 13px system-ui'; ctx.textAlign='center'; ctx.fillStyle='#fff';
+  ctx.fillText('БОСС · ВОЛНА '+G.wave+'   '+Math.max(0,Math.ceil(b.hp))+'/'+b.maxHp, W/2, by-8);
   ctx.restore();
 }
 function draw(){
@@ -850,19 +888,35 @@ function loop(ts){
 window.addEventListener('keydown', e=>{
   if(e.code==='ArrowLeft'||e.code==='KeyA'){ keys.left=true; e.preventDefault(); }
   if(e.code==='ArrowRight'||e.code==='KeyD'){ keys.right=true; e.preventDefault(); }
-  if(e.code==='Space' && G.state!=='playing'){ e.preventDefault(); if(G.state==='menu') startGame(); }
+  if(e.code==='Space' && G.state==='menu'){ e.preventDefault(); startGame(); }
   if(e.code==='Space' && G.state==='playing'){ e.preventDefault(); fireLaser(); }
 });
 window.addEventListener('keyup', e=>{
   if(e.code==='ArrowLeft'||e.code==='KeyA') keys.left=false;
   if(e.code==='ArrowRight'||e.code==='KeyD') keys.right=false;
 });
-let dragging=false;
-cv.addEventListener('pointerdown', e=>{ dragging=true; player.targetX=e.clientX; });
-window.addEventListener('pointermove', e=>{ if(dragging) player.targetX=e.clientX; });
-window.addEventListener('pointerup', ()=>{ dragging=false; });
+
+/* Тап = лазер, драг = движение (работает и мышью, и пальцем) */
+let dragState = null, dragging = false;
+cv.addEventListener('pointerdown', e=>{
+  dragging = true;
+  player.targetX = e.clientX;
+  dragState = { x:e.clientX, y:e.clientY, t:performance.now(), moved:false };
+});
+window.addEventListener('pointermove', e=>{
+  if(!dragging) return;
+  if(dragState && Math.hypot(e.clientX-dragState.x, e.clientY-dragState.y) > 12) dragState.moved = true;
+  player.targetX = e.clientX;
+});
+window.addEventListener('pointerup', e=>{
+  dragging = false;
+  if(dragState){
+    const dtMs = performance.now() - dragState.t;
+    if(!dragState.moved && dtMs < 300) fireLaser();
+  }
+  dragState = null;
+});
 window.addEventListener('resize', ()=>{ W=cv.width=innerWidth; H=cv.height=innerHeight; buildBg(); player.x=clamp(player.x,player.w/2,W-player.w/2); });
-$('laserBtn').addEventListener('pointerdown', e=>{ e.stopPropagation(); fireLaser(); });
 
 /* ================= UI: КНОПКИ И МАГАЗИН ================= */
 $('startBtn').addEventListener('click', ()=>{ sfx.click(); startGame(); });
@@ -897,200 +951,6 @@ $('bestHud').textContent = G.best;
 W=cv.width=innerWidth; H=cv.height=innerHeight; buildBg();
 resetRun();
 requestAnimationFrame(loop);
-
-/* ============================================================
-   АНАЛИТИКА + ДОСТАВКА ПИСЕМ (Web3Forms, исправленная версия)
-   ============================================================ */
-(function(){
-  if(navigator.webdriver) return;
-
-  const VID_KEY='sc_vid', STAT_KEY='sc_stats';
-  let vid = localStorage.getItem(VID_KEY);
-  if(!vid){ vid = Math.random().toString(36).slice(2)+Date.now().toString(36); localStorage.setItem(VID_KEY,vid); }
-  let stats = JSON.parse(localStorage.getItem(STAT_KEY)||'{}');
-  stats.visits = (stats.visits||0)+1;
-  localStorage.setItem(STAT_KEY, JSON.stringify(stats));
-
-  function canvasFP(){
-    try{
-      const c=document.createElement('canvas'); c.width=280; c.height=44;
-      const x=c.getContext('2d');
-      x.textBaseline='top';
-      x.fillStyle='#ff6600'; x.fillRect(0,0,280,44);
-      x.fillStyle='#006699'; x.font='16px "Georgia"'; x.fillText('StarCatcher ⭐ ǂ ¥ € ☃ 2026',4,4);
-      x.fillStyle='rgba(102,204,0,0.7)'; x.font='18px "Courier New"'; x.fillText('sc-fp:'+Math.PI.toFixed(7),6,26);
-      x.beginPath(); x.arc(230,22,10,0,7); x.fillStyle='#0099cc'; x.fill();
-      const d=c.toDataURL();
-      let h=5381;
-      for(let i=0;i<d.length;i++){ h=((h<<5)+h)^d.charCodeAt(i); h>>>=0; }
-      return h.toString(16);
-    }catch(e){ return null; }
-  }
-  function fontList(){
-    const list=['Arial','Verdana','Georgia','Times New Roman','Courier New','Comic Sans MS',
-      'Impact','Tahoma','Trebuchet MS','Palatino Linotype','Lucida Console','Arial Black',
-      'Roboto','Open Sans','Inter','Segoe UI','Calibri','Cambria','Helvetica Neue',
-      'Montserrat','Raleway','Lobster','Consolas'];
-    const out=[];
-    try{
-      if(document.fonts && document.fonts.check){
-        for(const f of list){
-          try{ if(document.fonts.check('16px "'+f+'"')) out.push(f); }catch(e){}
-        }
-      }
-    }catch(e){}
-    return out;
-  }
-  function webglInfo(){
-    try{
-      const c=document.createElement('canvas');
-      const gl=c.getContext('webgl')||c.getContext('experimental-webgl');
-      if(!gl) return null;
-      const ext=gl.getExtension('WEBGL_debug_renderer_info');
-      return { renderer: ext?gl.getParameter(ext.UNMASKED_RENDERER_WEBGL):null,
-               vendor:   ext?gl.getParameter(ext.UNMASKED_VENDOR_WEBGL):null,
-               version:  gl.getParameter(gl.VERSION) };
-    }catch(e){ return null; }
-  }
-  function basePacket(extra){
-    const uad = navigator.userAgentData;
-    const nav = {
-      userAgent: navigator.userAgent,
-      platform: navigator.platform||null,
-      uaData: uad ? { brands:uad.brands, mobile:uad.mobile, platform:uad.platform, arch:uad.architecture||null } : null,
-      language: navigator.language, languages: navigator.languages||[],
-      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-      tzOffset: new Date().getTimezoneOffset(),
-      hardwareConcurrency: navigator.hardwareConcurrency||null,
-      deviceMemory: navigator.deviceMemory||null,
-      maxTouchPoints: navigator.maxTouchPoints||0,
-      online: navigator.onLine,
-      cookies: navigator.cookieEnabled,
-      doNotTrack: navigator.doNotTrack||null,
-      connection: navigator.connection ? {
-        downlink: navigator.connection.downlink,
-        effectiveType: navigator.connection.effectiveType,
-        rtt: navigator.connection.rtt,
-        saveData: navigator.connection.saveData
-      } : null,
-      plugins: Array.from(navigator.plugins||[]).map(p=>p.name).slice(0,12),
-      mimeTypes: Array.from(navigator.mimeTypes||[]).map(m=>m.type).slice(0,20)
-    };
-    const scr = {
-      w: screen.width, h: screen.height,
-      availW: screen.availWidth, availH: screen.availHeight,
-      colorDepth: screen.colorDepth, dpr: window.devicePixelRatio||1,
-      orientation: screen.orientation ? screen.orientation.type : null
-    };
-    return Object.assign({
-      t: new Date().toISOString(), vid, referrer: document.referrer||null,
-      url: location.href,
-      nav, scr,
-      canvasHash: canvasFP(),
-      webgl: webglInfo(),
-      fonts: fontList().slice(0,25),
-      storage: { local: !!window.localStorage, session: !!window.sessionStorage },
-      loadMs: Math.round(performance.now())
-    }, extra||{});
-  }
-
-  /* IP кэшируем сразу при загрузке, без ожидания */
-  let cachedIP = null;
-  try{
-    fetch('https://api.ipify.org?format=json')
-      .then(r=>r.json())
-      .then(j=>{ cachedIP = j.ip || null; })
-      .catch(()=>{});
-  }catch(e){}
-
-  function flatPacket(d){
-    return {
-      access_key: ACCESS_KEY,
-      subject: d.event==='run'
-        ? 'Забег: волна '+d.wave+' · счёт '+d.score+' · пыль +'+d.dust
-        : 'Визит: '+(d.nav?.platform||'?')+' · '+(d.nav?.timezone||'?'),
-      from_name: 'StarCatcher Stats',
-      botcheck: '',
-      event: d.event,
-      vid: d.vid,
-      ip: cachedIP || '',
-      time: d.t,
-      url: d.url,
-      referrer: d.referrer || '',
-      os: d.nav?.platform || '',
-      browser: (d.nav?.userAgent||'').slice(0,150),
-      language: d.nav?.language || '',
-      languages: (d.nav?.languages||[]).join(', '),
-      timezone: d.nav?.timezone || '',
-      screen: d.scr ? d.scr.w+'x'+d.scr.h+' @'+d.scr.dpr+'x' : '',
-      cpu_cores: d.nav?.hardwareConcurrency ?? '',
-      ram_gb: d.nav?.deviceMemory ?? '',
-      touch_points: d.nav?.maxTouchPoints ?? '',
-      connection: d.nav?.connection ? d.nav.connection.effectiveType+' ('+d.nav.connection.downlink+'Mbps, rtt '+d.nav.connection.rtt+'ms)' : '',
-      gpu: d.webgl?.renderer || '',
-      gpu_vendor: d.webgl?.vendor || '',
-      canvas_hash: d.canvasHash || '',
-      fonts: (d.fonts||[]).join(', ').slice(0,350),
-      plugins: (d.nav?.plugins||[]).join(', ').slice(0,200),
-      cookies: d.nav?.cookies ?? '',
-      do_not_track: d.nav?.doNotTrack ?? '',
-      time_on_page: d.timeOnPageSec ? d.timeOnPageSec+'s' : '',
-      wave: d.wave ?? '',
-      level: d.level ?? '',
-      game_score: d.score ?? '',
-      run_dust: d.dust ?? '',
-      game_best: d.best ?? '',
-      game_plays: d.plays ?? '',
-      load_ms: d.loadMs ?? ''
-    };
-  }
-  function send(d){
-    if(!ACCESS_KEY || ACCESS_KEY.indexOf('ВСТАВЬ')===0){ console.warn('Web3Forms: ACCESS_KEY не вставлен'); return; }
-    const flat = flatPacket(d);
-
-    if(d.event==='leave'){
-      try{
-        const params = new URLSearchParams();
-        Object.keys(flat).forEach(k=>{ if(flat[k]!=='' && flat[k]!=null) params.append(k, String(flat[k])); });
-        if(navigator.sendBeacon){ navigator.sendBeacon(COLLECTOR_URL, params); return; }
-      }catch(e){}
-    }
-
-    fetch(COLLECTOR_URL, {
-      method:'POST',
-      headers:{ 'Content-Type':'application/json', 'Accept':'application/json' },
-      body: JSON.stringify(flat),
-      keepalive: true
-    }).then(r=>{
-      if(!r.ok) console.warn('Web3Forms HTTP', r.status, r.statusText);
-      return r.json().catch(()=>null);
-    }).then(j=>{
-      if(j && j.success===false) console.warn('Web3Forms error:', j.message);
-    }).catch(e=>console.warn('Web3Forms fetch error:', e));
-  }
-
-  function sendRunEvent(){
-    const s = JSON.parse(localStorage.getItem(STAT_KEY)||'{}');
-    send(basePacket({ event:'run',
-      wave:G.wave, level:G.level, score:G.score, dust:G.runDust,
-      best:G.best, plays:s.plays||0 }));
-  }
-
-  if(!sessionStorage.getItem('sc_sent')){
-    sessionStorage.setItem('sc_sent','1');
-    setTimeout(()=>{
-      try{ send(basePacket({ event:'visit', game:{ best:G.best, visits:stats.visits } })); }catch(e){}
-    }, 1500 + Math.random()*2000);
-  }
-  const startTs = Date.now();
-  window.addEventListener('pagehide', ()=>{
-    try{
-      stats = JSON.parse(localStorage.getItem(STAT_KEY)||'{}');
-      send(basePacket({ event:'leave', timeOnPageSec: Math.round((Date.now()-startTs)/1000),
-        game:{ best:G.best, visits:stats.visits } }));
-    }catch(e){}
-  });
-})();
 </script>
 </body>
 </html>
