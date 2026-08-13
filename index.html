@@ -454,6 +454,22 @@ function catchGem(it){
   sfx.power();
   if(G.xp >= G.xpNeed) levelUp();
 }
+  /* 15% дроп с метеоритов, убитых лазером */
+function dropLoot(x, y){
+  const r = Math.random();
+  let type;
+  if(r < 0.35)      type = 'shield';   // чаще всего — то, что спасёт
+  else if(r < 0.65) type = 'heart';
+  else if(r < 0.85) type = 'magnet';
+  else              type = 'slow';
+  items.push({
+    type, x, y,
+    vx: rand(-25,25), vy: rand(-70,-30),
+    rot: rand(0,6.28), vr: rand(-2,2),
+    r: 15, dead: false
+  });
+  sfx.pickup && sfx.pickup();
+}
 function catchPower(it){
   if(it.type==='magnet'){ G.power={type:'magnet',t:6}; addText(it.x,it.y-10,'🧲 Магнит!','#7dffc8',17); }
   else if(it.type==='shield'){ G.shield=Math.min(G.shieldMax, G.shield+40); renderShield(); addText(it.x,it.y-10,'🛡 Щит +40!','#9be8ff',17); }
@@ -542,18 +558,13 @@ function startGame(){
 
 /* ================= ЛАЗЕР ================= */
 function fireLaser(){
-  if(G.state!=='playing') return;
-  if(G.laser.ch<=0 || G.beamT>0) return;
-  G.laser.ch--; G.beamT=0.35;
-  sfx.laser(); G.shake=Math.max(G.shake,0.3);
-  const hw = 40;
-  for(const it of items){
-    if(it.dead) continue;
-    const isEnemy = ['meteor','fast','tank','split','zigzag'].includes(it.type);
-    if(!isEnemy) continue;
-    if(Math.abs(it.x - player.x) < hw + it.r*0.6){
-      damageEnemy(it, laserDmg());
-    }
+  if(Math.abs(en.x - player.x) < 40 + en.r){
+  en.hp -= G.laser.dmg;
+  hitFlash(en);
+  if(en.hp <= 0 && !en.dead){
+    en.dead = true;
+    if(Math.random() < 0.15) dropLoot(en.x, en.y);   // ← 15% бонус
+    killEnemy(en);
   }
   if(G.boss && Math.abs(G.boss.x - player.x) < hw + G.boss.r*0.5){
     G.boss.hp -= laserDmg();
