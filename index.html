@@ -100,7 +100,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#05060f;font-family:
 
 <div id="roomOverlay" class="overlay hidden">
  <h2>🌐 Комната создана</h2>
- <div class="sub">Отправь этот код другу — он введёт его в «Присоединиться»</div>
+ <div class="sub" id="roomSub">Отправь этот код другу — он введёт его в «Присоединиться»</div>
  <div id="roomCode">SC-•••••</div>
  <button id="roomStart">▶ Начать игру</button>
  <button id="roomCancel" class="ghost">Отмена</button>
@@ -310,9 +310,8 @@ function killEnemy(e,byLaser){
  else if(r<0.095)items.push({type:'gem',x:e.x,y:e.y,r:10,vy:120,vx:rand(-20,20),rot:0,vrot:2,phase:rand(0,TAU),t:0,dead:false});
  else if(r<0.165||(e.type==='tank'&&Math.random()<0.15))items.push({type:'heart',x:e.x,y:e.y,r:13,vy:90,vx:rand(-20,20),rot:0,vrot:0,phase:rand(0,TAU),t:0,dead:false});
 }
-function fireLaser(){fireLaserFor(player);}
 function fireLaserFor(ship){
- if(G.state!=='playing'||ship.laser.cd>0||ship.laser.ch<=0)return;
+ if(G.state!=='playing'||ship.laser.ch<=0)return;
  ship.laser.ch--;ship.laser.cd=G.laserCd;ship.beamT=0.2;sfx('laser');
  const px=ship.x;
  for(const it of items){
@@ -364,7 +363,7 @@ function renderHearts(){const el=$('hearts');el.innerHTML='';for(let i=0;i<G.max
 function renderShield(){const el=$('shieldfill');el.style.width=clamp(G.shield/G.shieldMax*100,0,100)+'%';}
 function mult(){return Math.min(20,1+Math.floor(G.combo/5)*(G.multBonus?2:1));}
 function checkXp(){
- while(G.xp>=G.xpNeed){G.xp-=G.xpNeed;G.level++;G.xpNeed=Math.round(G.xpNeed*1.45+6);sfx('level');texts.push({txt:'УРОВЕНЬ '+G.level+'!',x:W/2,y:H*.4,t:0,max:1.2,size:24,color:'#f0abfc'});}
+ while(G.xp>=G.xpNeed){G.xp-=G.xpNeed;G.level++;G.xpNeed=Math.round(G.xpNeed*1.45+6);G.laserDmg+=1;sfx('level');texts.push({txt:'УРОВЕНЬ '+G.level+'! +1 урон лазера',x:W/2,y:H*.4,t:0,max:1.2,size:24,color:'#f0abfc'});}
  $('lvl').textContent='УР '+G.level;
  $('xpfill').style.width=clamp(G.xp/G.xpNeed*100,0,100)+'%';
 }
@@ -417,9 +416,10 @@ function resetRun(){
  G.wave=1;G.waveT=0;G.score=0;G.level=1;G.xp=0;G.xpNeed=18;
  G.maxLives=3+(M.hp||0);G.lives=G.maxLives;
  G.shieldMax=60+(M.shieldMax||0)*20;G.shield=G.shieldMax;
- G.combo=0;G.comboT=0;G.power=null;G.powerT=0;G.shake=0;G.spawnT=0;G.invuln=0;G.boss=null;G.runDust=0;
+ G.combo=0;G.comboT=0;G.shake=0;G.spawnT=0;G.invuln=0;G.boss=null;G.runDust=0;
  G.laserDmg=8+(M.laserDmg||0)*4;G.laserCd=Math.max(5,9-(M.laserCd||0));G.laserMaxCh=Math.min(3,1+(M.laserCh||0));
- G.starVal=1;G.stars=0;G.starsGoal=16;G.multBonus=0;G.speedMul=1+(M.speed||0)*0.05;
+ G.starVal=1+(M.val||0)*2;G.stars=0;G.starsGoal=16;G.multBonus=M.mult||0;G.speedMul=1+(M.speed||0)*0.05;
+ if(M.magnet){G.power='magnet';G.powerT=6;}else{G.power=null;G.powerT=0;}
  player=mkShip(W/2);p2=mkShip(W/2+140);
  player.laser.max=G.laserMaxCh;p2.laser.max=G.laserMaxCh;
  items=[];bullets=[];parts=[];texts=[];
@@ -434,8 +434,6 @@ function startGame(){
  ['menu','over','upg','shop','joinOverlay','roomOverlay','waitOverlay'].forEach(id=>$(id).classList.add('hidden'));
  resetRun();G.state='playing';
 }
-function winGame(){G.state='over';G.runDust+=30;G.score+=500;$('overTitle').textContent='🏆 ПОБЕДА! Все 5 боссов повержены';showOver();}
-function gameOver(){G.state='over';$('overTitle').textContent='💀 Забег окончен';showOver();}
 function showOver(){
  if(G.score>G.best){G.best=G.score;}
  G.dust+=G.runDust;saveMeta();
@@ -472,6 +470,7 @@ function update(dt){
   sh.laser.max=G.laserMaxCh;
   if(sh.laser.ch<sh.laser.max){sh.laser.cd-=dt;if(sh.laser.cd<=0){sh.laser.ch++;sh.laser.cd=G.laserCd;}}
   if(sh.beamT>0)sh.beamT-=dt;
+  if(sh.invuln>0)sh.invuln-=dt;
  }
  if(G.boss)updateBoss(dt);
  for(const b of bullets){
@@ -717,8 +716,8 @@ window.addEventListener('keydown',e=>{
  if(e.code==='ArrowRight'){if(local2)keys2.right=true;else keys.right=true;e.preventDefault();}
  if(e.code==='ArrowUp'){e.preventDefault();if(!e.repeat&&G.state==='playing'){if(local2)fireLaserFor(p2,false);else fireLaser();}}
  if(e.code==='KeyW'){e.preventDefault();if(!e.repeat&&G.state==='playing')fireLaser();}
- if(e.code==='Space'){e.preventDefault();if(!e.repeat){if(G.state==='menu'||G.state==='over')startGame();else if(G.state==='playing')fireLaser();}}
- if(e.code==='Enter'&&G.state==='menu')startGame();
+ if(e.code==='Space'){e.preventDefault();if(!e.repeat){if((G.state==='menu'&&!$('menu').classList.contains('hidden'))||G.state==='over'){if(G.netRole)cleanupNet();G.mode='solo';startGame();}else if(G.state==='playing')fireLaser();}}
+ if(e.code==='Enter'&&G.state==='menu'&&!$('menu').classList.contains('hidden')){if(G.netRole)cleanupNet();G.mode='solo';startGame();}
 });
 window.addEventListener('keyup',e=>{
  const local2=G.mode==='local2';
@@ -783,8 +782,7 @@ function hostCreate(){
   G.net.conn=conn;
   conn.on('open',()=>{
    conn.send({t:'go'});
-   $('waitOverlay').classList.remove('hidden');
-   $('waitInfo').textContent='✅ Гость подключился! Жми «▶ Начать игру»';
+   $('roomSub').textContent='✅ Гость подключился! Жми «▶ Начать игру»';
    $('netStat').textContent='🌐 Гость подключён';
    sfx('power');
   });
@@ -822,7 +820,7 @@ function hostSendSnap(){
   lives:G.lives,maxLives:G.maxLives,shield:G.shield,shieldMax:G.shieldMax,
   combo:G.combo,comboT:G.comboT,power:G.power,powerT:G.powerT,shake:G.shake,mb:G.multBonus,
   boss:G.boss,
-  ships:[{x:player.x,ch:player.laser.ch,cd:player.laser.cd,beamT:player.beamT},{x:p2.x,ch:p2.laser.ch,cd:p2.laser.cd,beamT:p2.beamT}],
+  ships:[{x:player.x,ch:player.laser.ch,max:player.laser.max,cd:player.laser.cd,beamT:player.beamT},{x:p2.x,ch:p2.laser.ch,max:p2.laser.max,cd:p2.laser.cd,beamT:p2.beamT}],
   items:items.map(i=>({t:i.type,x:i.x,y:i.y,r:i.r,hp:i.hp,maxHp:i.maxHp,vy:i.vy,vx:i.vx||0,rot:i.rot,vrot:i.vrot,t:i.t,phase:i.phase,seed:i.seed,pal:i.pal,ft:i.ft,baseX:i.baseX,hit:i.hit||0})),
   bullets:bullets.map(b=>({x:b.x,y:b.y,vx:b.vx,vy:b.vy,r:b.r})),
   choices:G.choices.map(u=>u.id),pick1:G.net.pick1,pick2:G.net.pick2
@@ -833,8 +831,8 @@ function guestApply(s){
  G.lives=s.lives;G.maxLives=s.maxLives;G.shield=s.shield;G.shieldMax=s.shieldMax;
  G.combo=s.combo;G.comboT=s.comboT||0;G.power=s.power;G.powerT=s.powerT||0;G.shake=s.shake||0;
  G.boss=s.boss;G.multBonus=s.mb||0;
- player.x=s.ships[1].x;player.laser.ch=s.ships[1].ch;player.laser.cd=s.ships[1].cd;player.beamT=s.ships[1].beamT;
- p2.x=s.ships[0].x;p2.laser.ch=s.ships[0].ch;p2.laser.cd=s.ships[0].cd;p2.beamT=s.ships[0].beamT;
+ player.x=s.ships[1].x;player.laser.ch=s.ships[1].ch;player.laser.max=s.ships[1].max||player.laser.max;player.laser.cd=s.ships[1].cd;player.beamT=s.ships[1].beamT;
+ p2.x=s.ships[0].x;p2.laser.ch=s.ships[0].ch;p2.laser.max=s.ships[0].max||p2.laser.max;p2.laser.cd=s.ships[0].cd;p2.beamT=s.ships[0].beamT;
  items=s.items.map(i=>({type:i.t,x:i.x,y:i.y,r:i.r,hp:i.hp||1,maxHp:i.maxHp||i.hp||1,vy:i.vy,vx:i.vx,rot:i.rot||0,vrot:i.vrot||0,t:i.t||0,phase:i.phase||0,seed:i.seed||0,pal:i.pal||0,ft:i.ft||0,baseX:i.baseX||i.x,hit:i.hit||0,dead:false}));
  bullets=s.bullets.map(b=>({x:b.x,y:b.y,vx:b.vx,vy:b.vy,r:b.r,dead:false}));
  $('score').textContent=G.score;$('waveHud').textContent=G.wave;
@@ -886,6 +884,7 @@ function handleGuestMsg(d){
  if(d.t==='resume'){$('upg').classList.add('hidden');guestPickedShown=false;guestPicked=null;}
  if(d.t==='end'&&!G.net.ended){
   G.net.ended=true;G.state='over';
+  if(G.net.timer){clearInterval(G.net.timer);G.net.timer=null;}
   G.score=d.score;G.wave=d.wave;G.level=d.level;G.runDust=d.runDust||0;
   showOver();
   $('overTitle').textContent=d.win?'🏆 ПОБЕДА! Все 5 боссов повержены':'💀 Забег окончен';
