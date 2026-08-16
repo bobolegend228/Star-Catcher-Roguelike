@@ -8,7 +8,7 @@
 <style>
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{width:100%;height:100%;overflow:hidden;background:#05060f;font-family:system-ui,-apple-system,'Segoe UI',Roboto,Arial,sans-serif;user-select:none;-webkit-user-select:none;touch-action:none}
-#cv{display:block;width:100vw;height:100vh}
+#cv{display:block;width:100%;height:100%}
 #hud{position:fixed;top:0;left:0;right:0;padding:10px 16px;display:flex;justify-content:space-between;align-items:flex-start;pointer-events:none;z-index:5;font-weight:700}
 .hl{color:#ffd75e;font-size:20px;text-shadow:0 0 12px rgba(255,215,94,.6)}
 .hl small{display:block;font-size:11px;color:#8fa3c8;font-weight:400;margin-top:2px}
@@ -196,6 +196,14 @@ function sfx(k){
 
 let bg=[];
 function buildBg(){bg=[];for(let i=0;i<90;i++)bg.push({x:Math.random()*W,y:Math.random()*H,r:rand(.4,1.8),p:rand(0,TAU),s:rand(.3,1.5)});}
+function syncViewport(){
+ const vv=window.visualViewport;
+ W=Math.round(vv?vv.width:innerWidth);
+ H=Math.round(vv?vv.height:innerHeight);
+ cv.width=W;cv.height=H;
+ cv.style.width=W+'px';cv.style.height=H+'px';
+ buildBg();
+}
 function drawBg(dt){for(const s of bg){s.p+=dt*s.s;ctx.fillStyle='rgba(255,255,255,'+(0.25+0.35*Math.sin(s.p)).toFixed(2)+')';ctx.beginPath();ctx.arc(s.x,s.y,s.r,0,TAU);ctx.fill();}}
 
 const EN={meteor:{r:17,hp:1,sp:70,scr:2},fast:{r:11,hp:1,sp:190,scr:3},tank:{r:26,hp:4,sp:45,scr:5},split:{r:15,hp:2,sp:85,scr:4},zigzag:{r:13,hp:2,sp:110,scr:4},spinner:{r:14,hp:2,sp:75,scr:5},shard:{r:12,hp:2,sp:140,scr:5},bomber:{r:16,hp:2,sp:60,scr:6},warp:{r:15,hp:3,sp:95,scr:6},ghost:{r:14,hp:3,sp:65,scr:7},crystal:{r:13,hp:3,sp:80,scr:7}};
@@ -697,7 +705,7 @@ function loop(ts){
  draw();
  requestAnimationFrame(loop);
 }
-window.addEventListener('resize',()=>{W=innerWidth;H=innerHeight;cv.width=W;cv.height=H;buildBg();});
+window.addEventListener('resize',()=>{syncViewport();});
 /*===КОНЕЦ ЧАСТИ 2===*/
   /*===== ЧАСТЬ 3: УПРАВЛЕНИЕ + СЕТЕВОЙ КООП =====*/
 /* ЛАЗЕР ГОСТЯ: не стреляем локально, а шлём хосту (переопределение — последнее объявление побеждает) */
@@ -972,7 +980,12 @@ document.addEventListener('contextmenu',e=>e.preventDefault());
 window.addEventListener('touchmove',e=>e.preventDefault(),{passive:false});
 const qp=new URLSearchParams(location.search);
 if(qp.get('join')){$('joinCode').value=qp.get('join').toUpperCase();$('menu').classList.add('hidden');$('joinOverlay').classList.remove('hidden');}
-W=innerWidth;H=innerHeight;cv.width=W;cv.height=H;buildBg();
+syncViewport();
+if(window.visualViewport){
+ window.visualViewport.addEventListener('resize',syncViewport);
+ window.visualViewport.addEventListener('scroll',syncViewport);
+}
+window.addEventListener('orientationchange',()=>setTimeout(syncViewport,50));
 resetRun();
 requestAnimationFrame(loop);
 /*===КОНЕЦ ЧАСТИ 4 — КОНЕЦ ФАЙЛА===*/
