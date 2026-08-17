@@ -182,12 +182,12 @@ const RUN_UPGRADES=[
 const G={state:'menu',mode:'solo',netRole:null,wave:1,waveT:0,score:0,best:+localStorage.getItem('scBest')||0,dust:+localStorage.getItem('scDust')||0,
  level:1,xp:0,xpNeed:18,combo:0,comboT:0,t:0,
  laserDmg:8,laserCd:9,laserMaxCh:1,starVal:1,starsGoal:16,stars:0,multBonus:0,speedMul:1,
- power:null,powerT:0,shake:0,spawnT:0,invuln:0,boss:null,runDust:0,choices:[],
+ shake:0,spawnT:0,invuln:0,boss:null,runDust:0,choices:[],
  net:{peer:null,conn:null,code:'',timer:null,pick1:null,pick2:null,ended:false}};
 let M={};try{M=JSON.parse(localStorage.getItem('scMeta')||'{}');}catch(e){}
 const saveMeta=()=>{try{localStorage.setItem('scMeta',JSON.stringify(M));localStorage.setItem('scDust',G.dust);localStorage.setItem('scBest',G.best);}catch(e){}};
 
-const mkShip=x=>({x,w:44,targetX:x,laser:{ch:1,max:1,cd:0},beamT:0,invuln:0,lives:3,maxLives:3,shield:0,shieldMax:60,down:false});
+const mkShip=x=>({x,w:44,targetX:x,laser:{ch:1,max:1,cd:0},beamT:0,invuln:0,lives:3,maxLives:3,shield:0,shieldMax:60,down:false,power:null,powerT:0});
 let player=mkShip(W/2),p2=mkShip(W/2+140);
 let items=[],bullets=[],parts=[],texts=[];
 const keys={left:false,right:false},keys2={left:false,right:false},gkeys={left:false,right:false};
@@ -359,6 +359,13 @@ function fireLaserFor(ship){
   for(let i=0;i<4;i++)parts.push({x:G.boss.x+rand(-G.boss.r,G.boss.r),y:G.boss.y+rand(-G.boss.r,G.boss.r),vx:rand(-140,140),vy:rand(-140,140),life:0,max:.3,size:2.5,color:'#7dd3fc'});
   if(G.boss.hp<=0)killBoss();
  }
+ for(const b of bullets){
+  if(b.dead)continue;
+  if(b.y<H-70&&Math.abs(b.x-px)<46){
+   b.dead=true;
+   for(let i=0;i<4;i++)parts.push({x:b.x+rand(-6,6),y:b.y+rand(-6,6),vx:rand(-110,110),vy:rand(-110,110),life:0,max:.25,size:2,color:'#7dd3fc'});
+  }
+ }
 }
 function shipLabel(sh){
  if(sh===player){return G.mode==='local2'?'P1':'ТЫ';}
@@ -383,6 +390,7 @@ function hitPlayer(ship){
 }
 function catchItem(it,ship){
  if(it.dead)return;
+ if(ship.down&&it.type!=='heart'&&it.type!=='shield')return;
  if(Math.hypot(it.x-ship.x,it.y-(H-66))<it.r+26){
   it.dead=true;
   if(it.type==='star'){
@@ -401,8 +409,8 @@ function catchItem(it,ship){
    renderHearts();sfx('heart');
   }
   else if(it.type==='shield'){ship.shield=Math.min(ship.shieldMax,ship.shield+25);renderShield();sfx('shield');}
-  else if(it.type==='magnet'){G.power='magnet';G.powerT=6;sfx('power');}
-  else if(it.type==='slow'){G.power='slow';G.powerT=5;sfx('power');}
+  else if(it.type==='magnet'){ship.power='magnet';ship.powerT=6;sfx('power');}
+  else if(it.type==='slow'){ship.power='slow';ship.powerT=5;sfx('power');}
   for(let i=0;i<8;i++)parts.push({x:it.x,y:it.y,vx:rand(-140,140),vy:rand(-140,140),life:0,max:.4,size:2.5,color:'#7dffc8'});
  }
 }
@@ -479,10 +487,12 @@ function resetRun(){
  G.combo=0;G.comboT=0;G.shake=0;G.spawnT=0;G.invuln=0;G.boss=null;G.runDust=0;
  G.laserDmg=8+(M.laserDmg||0)*4;G.laserCd=Math.max(5,9-(M.laserCd||0));G.laserMaxCh=Math.min(3,1+(M.laserCh||0));
  G.starVal=1+(M.val||0)*2;G.stars=0;G.starsGoal=16;G.multBonus=M.mult||0;G.speedMul=1+(M.speed||0)*0.05;
- if(M.magnet){G.power='magnet';G.powerT=6;}else{G.power=null;G.powerT=0;}
  player=mkShip(W/2);p2=mkShip(W/2+140);
  const startLives=3+(M.hp||0),startShield=60+(M.shieldMax||0)*20;
- for(const sh of [player,p2]){sh.maxLives=startLives;sh.lives=startLives;sh.shieldMax=startShield;sh.shield=startShield;sh.down=false;}
+ for(const sh of [player,p2]){
+  sh.maxLives=startLives;sh.lives=startLives;sh.shieldMax=startShield;sh.shield=startShield;sh.down=false;
+  if(M.magnet){sh.power='magnet';sh.powerT=6;}else{sh.power=null;sh.powerT=0;}
+ }
  player.laser.max=G.laserMaxCh;p2.laser.max=G.laserMaxCh;
  items=[];bullets=[];parts=[];texts=[];
  keys.left=keys.right=false;keys2.left=keys2.right=false;gkeys.left=gkeys.right=false;
@@ -508,7 +518,6 @@ function update(dt){
  G.t+=dt;
  if(G.comboT>0){G.comboT-=dt;if(G.comboT<=0){G.combo=0;$('combo').className='';$('combo').textContent='';}}
  if(G.combo>=3){$('combo').textContent='×'+mult()+' · '+G.combo;$('combo').className='show';}
- if(G.powerT>0)G.powerT-=dt;
  if(G.invuln>0)G.invuln-=dt;
  if(!G.boss){
   G.waveT+=dt;
@@ -533,6 +542,7 @@ function update(dt){
   if(sh.laser.ch<sh.laser.max){sh.laser.cd-=dt;if(sh.laser.cd<=0){sh.laser.ch++;sh.laser.cd=G.laserCd;}}
   if(sh.beamT>0)sh.beamT-=dt;
   if(sh.invuln>0)sh.invuln-=dt;
+  if(sh.powerT>0){sh.powerT-=dt;if(sh.powerT<=0){sh.powerT=0;sh.power=null;}}
  }
  if(G.boss)updateBoss(dt);
  for(const b of bullets){
@@ -543,7 +553,8 @@ function update(dt){
   }
  }
  bullets=bullets.filter(b=>!b.dead);
- const slow=G.power==='slow'?0.6:1;
+ const magnetShips=shipsAll().filter(sh=>sh.power==='magnet'&&sh.powerT>0&&!sh.down);
+ const slow=shipsAll().some(sh=>sh.power==='slow'&&sh.powerT>0)?0.6:1;
  for(const it of items){
   it.t+=dt;
   it.y+=it.vy*slow*dt;it.x+=(it.vx||0)*dt;it.rot+=(it.vrot||0)*dt;
@@ -554,9 +565,11 @@ function update(dt){
   if(it.type==='warp'&&it.y>H*.5&&Math.random()<dt*2){it.x=rand(30,W-30);it.y=40;for(let i=0;i<6;i++)parts.push({x:it.x,y:it.y,vx:rand(-100,100),vy:rand(-100,100),life:0,max:.3,size:2,color:'#c084fc'});}
   if(it.type==='ghost')it.ft+=dt;
   if(it.type==='bomber'&&Math.random()<dt*3)parts.push({x:it.x+rand(-it.r,it.r),y:it.y+rand(-it.r,it.r),vx:0,vy:40,life:0,max:.4,size:2,color:'#ff8a5e'});
-  if(G.power==='magnet'&&(it.type==='star'||it.type==='gem')){
-   const dx=player.x-it.x,dy=(H-66)-it.y,d=Math.hypot(dx,dy)||1;
-   if(d<160){it.x+=dx/d*340*dt;it.y+=dy/d*340*dt;}
+  if(it.type==='star'||it.type==='gem'){
+   for(const msh of magnetShips){
+    const dx=msh.x-it.x,dy=(H-66)-it.y,d=Math.hypot(dx,dy)||1;
+    if(d<160){it.x+=dx/d*340*dt;it.y+=dy/d*340*dt;break;}
+   }
   }
   for(const sh of shipsAll()){
    if(it.dead)break;
@@ -718,6 +731,11 @@ function drawShip(sh,label,local){
  for(let i=0;i<sh.laser.max;i++){
   ctx.fillStyle=i<sh.laser.ch?(local?'#7dd3fc':'#f0abfc'):'rgba(255,255,255,.15)';
   ctx.fillRect(x-16+i*11,y-30,9,4);
+ }
+ if(sh.power&&sh.powerT>0){
+  ctx.font='700 11px system-ui';ctx.textAlign='center';
+  ctx.fillStyle=sh.power==='magnet'?'#7dffc8':'#f0abfc';
+  ctx.fillText((sh.power==='magnet'?'🧲':'⏳')+' '+sh.powerT.toFixed(1)+'с',x,y-46);
  }
 }
 function drawBeam(sh){
@@ -881,11 +899,11 @@ function hostSendSnap(){
  if(!G.net.conn||!G.net.conn.open)return;
  G.net.conn.send({t:'snap',s:{
   state:G.state,score:G.score,wave:G.wave,level:G.level,xp:G.xp,xpNeed:G.xpNeed,
-  combo:G.combo,comboT:G.comboT,power:G.power,powerT:G.powerT,shake:G.shake,mb:G.multBonus,
+  combo:G.combo,comboT:G.comboT,shake:G.shake,mb:G.multBonus,
   boss:G.boss,
   ships:[
-   {x:player.x,ch:player.laser.ch,max:player.laser.max,cd:player.laser.cd,beamT:player.beamT,lives:player.lives,maxLives:player.maxLives,shield:player.shield,shieldMax:player.shieldMax,down:player.down},
-   {x:p2.x,ch:p2.laser.ch,max:p2.laser.max,cd:p2.laser.cd,beamT:p2.beamT,lives:p2.lives,maxLives:p2.maxLives,shield:p2.shield,shieldMax:p2.shieldMax,down:p2.down}
+   {x:player.x,ch:player.laser.ch,max:player.laser.max,cd:player.laser.cd,beamT:player.beamT,lives:player.lives,maxLives:player.maxLives,shield:player.shield,shieldMax:player.shieldMax,down:player.down,power:player.power,powerT:player.powerT},
+   {x:p2.x,ch:p2.laser.ch,max:p2.laser.max,cd:p2.laser.cd,beamT:p2.beamT,lives:p2.lives,maxLives:p2.maxLives,shield:p2.shield,shieldMax:p2.shieldMax,down:p2.down,power:p2.power,powerT:p2.powerT}
   ],
   items:items.map(i=>({t:i.type,x:i.x,y:i.y,r:i.r,hp:i.hp,maxHp:i.maxHp,vy:i.vy,vx:i.vx||0,rot:i.rot,vrot:i.vrot,t:i.t,phase:i.phase,seed:i.seed,pal:i.pal,ft:i.ft,baseX:i.baseX,hit:i.hit||0})),
   bullets:bullets.map(b=>({x:b.x,y:b.y,vx:b.vx,vy:b.vy,r:b.r})),
@@ -894,13 +912,15 @@ function hostSendSnap(){
 }
 function guestApply(s){
  G.state=s.state;G.score=s.score;G.wave=s.wave;G.level=s.level;G.xp=s.xp;G.xpNeed=s.xpNeed;
- G.combo=s.combo;G.comboT=s.comboT||0;G.power=s.power;G.powerT=s.powerT||0;G.shake=s.shake||0;
+ G.combo=s.combo;G.comboT=s.comboT||0;G.shake=s.shake||0;
  G.boss=s.boss;G.multBonus=s.mb||0;
  const hs=s.ships[1],os=s.ships[0];
  player.x=hs.x;player.laser.ch=hs.ch;player.laser.max=hs.max||player.laser.max;player.laser.cd=hs.cd;player.beamT=hs.beamT;
  player.lives=hs.lives;player.maxLives=hs.maxLives;player.shield=hs.shield;player.shieldMax=hs.shieldMax;player.down=!!hs.down;
+ player.power=hs.power||null;player.powerT=hs.powerT||0;
  p2.x=os.x;p2.laser.ch=os.ch;p2.laser.max=os.max||p2.laser.max;p2.laser.cd=os.cd;p2.beamT=os.beamT;
  p2.lives=os.lives;p2.maxLives=os.maxLives;p2.shield=os.shield;p2.shieldMax=os.shieldMax;p2.down=!!os.down;
+ p2.power=os.power||null;p2.powerT=os.powerT||0;
  items=s.items.map(i=>({type:i.t,x:i.x,y:i.y,r:i.r,hp:i.hp||1,maxHp:i.maxHp||i.hp||1,vy:i.vy,vx:i.vx,rot:i.rot||0,vrot:i.vrot||0,t:i.t||0,phase:i.phase||0,seed:i.seed||0,pal:i.pal||0,ft:i.ft||0,baseX:i.baseX||i.x,hit:i.hit||0,dead:false}));
  bullets=s.bullets.map(b=>({x:b.x,y:b.y,vx:b.vx,vy:b.vy,r:b.r,dead:false}));
  $('score').textContent=G.score;$('waveHud').textContent=G.wave;
